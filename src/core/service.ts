@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events';
+import { certificatePaths, createCertificates, deleteCertificates, showCertificates } from './certs.js';
+import { readFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { RuntimeOverrides } from '../runtime/environment.js';
@@ -138,8 +140,14 @@ export class ProjectService extends EventEmitter {
   }
 
   model(): ProjectModel {
-    return this.document.snapshot();
+    const project = this.document.snapshot();
+    return { ...project, settings: { ...project.settings, https: this.document.studio.settings.https } };
   }
+
+  certStatus() { return showCertificates(this.location.dir); }
+  createCerts() { createCertificates(this.location.dir); }
+  deleteCerts() { if (this.document.studio.settings.https.enabled) throw invalid('Disable HTTPS before deleting certificates.'); deleteCertificates(this.location.dir); }
+  caCertificate() { if (!this.certStatus().exists) throw invalid('Create certificates first.'); return readFileSync(certificatePaths(this.location.dir).ca, 'utf8'); }
 
   exportBundle(collections?: string[]) { return exportBundle(this.model(), collections); }
 
@@ -241,7 +249,7 @@ export class ProjectService extends EventEmitter {
 
   private derive() {
     if (this.derived?.revision === this.revision) return this.derived;
-    const project = this.document.snapshot();
+    const project = this.model();
     const violations: Record<string, ValidationIssue[]> = {};
     for (const collection of project.collections) {
       for (const endpoint of collection.endpoints) {
@@ -493,7 +501,14 @@ export class ProjectService extends EventEmitter {
   }
 
   updateSettings(patch: SettingsPatch): Promise<void> {
-    return this.mutate((doc) => doc.updateSettings(patch));
+    return this.mutate((doc) => {
+      if (patch.https !== undefined) {
+        if (typeof patch.https?.enabled !== 'boolean') throw invalid('https.enabled must be a boolean.');
+        if (patch.https.enabled && !this.certStatus().exists) throw invalid('Create certificates before enabling HTTPS.');
+        doc.studio.settings.https = { enabled: patch.https.enabled };
+      }
+      doc.updateSettings(patch);
+    });
   }
 
   /**

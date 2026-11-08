@@ -24,6 +24,7 @@ const settingsSchema = z.object({
   /** Mockoon templating, data buckets, callbacks and CRUD/WebSocket routes run only when this is on. */
   allowTemplating: z.boolean().default(false),
   scenarioOverrideHeader: z.boolean().default(true),
+  https: z.object({ enabled: z.boolean().default(false) }).default({ enabled: false }),
 }).passthrough();
 
 export const profileSchema = z.object({
@@ -44,6 +45,7 @@ const studioFileSchema = z.object({
     logBodies: false,
     allowTemplating: false,
     scenarioOverrideHeader: true,
+    https: { enabled: false },
   }),
   profiles: z.record(z.string().min(1).max(200), profileSchema).refine((v) => Object.keys(v).length <= 200, 'Too many profiles.').default({}),
   activeProfileId: z.string().min(1).max(200).nullable().optional(),

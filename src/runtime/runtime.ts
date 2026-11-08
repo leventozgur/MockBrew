@@ -1,6 +1,7 @@
 import { type Environment, ServerErrorCodes, type Transaction } from '@mockoon/commons';
 import { MockoonServer } from '@mockoon/commons-server';
 import { EventEmitter } from 'node:events';
+import { certificatePaths, showCertificates } from '../core/certs.js';
 import type { Recording, RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
 import type { ProjectDocument } from '../store/document.js';
 import { type RuntimeEnvironment, type RuntimeOverrides, buildRuntimeEnvironment } from './environment.js';
@@ -62,7 +63,7 @@ export class MockRuntime extends EventEmitter {
       state: this.state,
       host: this.lastHost,
       port: this.lastPort,
-      ...(this.state === 'running' ? { url: `http://${this.lastHost === '0.0.0.0' ? 'localhost' : this.lastHost}:${this.lastPort}` } : {}),
+      ...(this.state === 'running' ? { url: `${this.current?.environment.tlsOptions.enabled ? 'https' : 'http'}://${this.lastHost === '0.0.0.0' ? 'localhost' : this.lastHost}:${this.lastPort}` } : {}),
       ...(this.error ? { error: this.error } : {}),
       ...(this.startedAt ? { startedAt: this.startedAt } : {}),
       routeCount: this.current?.routeCount ?? 0,
@@ -99,7 +100,7 @@ export class MockRuntime extends EventEmitter {
       environmentDirectory: this.options.environmentDirectory,
       disabledRoutes: [],
       enableAdminApi: false,
-      disableTls: true,
+      disableTls: !environment.tlsOptions.enabled,
       // Zero makes the engine retain every transaction (slice(-0)); keep only one.
       maxTransactionLogs: 1,
       envVarsPrefix: ENV_VARS_PREFIX,
@@ -108,9 +109,17 @@ export class MockRuntime extends EventEmitter {
     return server;
   }
 
+  private withTls(runtime: RuntimeEnvironment, document: ProjectDocument): RuntimeEnvironment {
+    const enabled = document.studio.settings.https.enabled;
+    const p = certificatePaths(this.options.environmentDirectory);
+    if (enabled && !showCertificates(this.options.environmentDirectory).exists) throw new Error('Create project certificates before starting HTTPS.');
+    runtime.environment.tlsOptions = { enabled, type: 'CERT', pfxPath: '', certPath: enabled ? p.cert : '', keyPath: enabled ? p.key : '', caPath: '', passphrase: '' };
+    return runtime;
+  }
+
   async start(document: ProjectDocument, overrides: RuntimeOverrides = {}): Promise<RuntimeStatus> {
     if (this.server) throw new Error('The mock server is already running.');
-    const runtimeEnv = buildRuntimeEnvironment(document, overrides);
+    const runtimeEnv = this.withTls(buildRuntimeEnvironment(document, overrides), document);
     this.logBodies = document.studio.settings.logBodies;
     await this.launch(runtimeEnv);
     return this.status();
@@ -155,11 +164,11 @@ export class MockRuntime extends EventEmitter {
   /** Applies a changed project to the running server without restarting it (unless host or port changed). */
   async update(document: ProjectDocument, overrides: RuntimeOverrides = {}): Promise<void> {
     if (!this.server) return;
-    const next = buildRuntimeEnvironment(document, overrides);
+    const next = this.withTls(buildRuntimeEnvironment(document, overrides), document);
     if (!next.environment.proxyMode || !next.environment.proxyHost) this.recording = false;
     this.logBodies = document.studio.settings.logBodies;
     const { environment } = next;
-    if (environment.port !== this.lastPort || environment.hostname !== this.lastHost) {
+    if (environment.port !== this.lastPort || environment.hostname !== this.lastHost || environment.tlsOptions.enabled !== this.current?.environment.tlsOptions.enabled) {
       await this.stopServer();
       try {
         await this.launch(next);

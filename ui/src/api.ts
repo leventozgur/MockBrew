@@ -65,3 +65,13 @@ export async function downloadExport(format: string, collections: string[]): Pro
   const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export async function downloadCa(): Promise<void> {
+  const token = sessionStorage.getItem(TOKEN_KEY) ?? '';
+  const response = await fetch('/api/certs/ca', { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error('Could not download the CA certificate.');
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url; link.download = 'mockbrew-ca.pem'; link.click();
+  URL.revokeObjectURL(url);
+}

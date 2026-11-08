@@ -79,6 +79,7 @@ export interface ProjectSettings {
   /** Off by default: imported Mockoon files must not run templating helpers, callbacks or data buckets. */
   allowTemplating: boolean;
   scenarioOverrideHeader: boolean;
+  https?: { enabled: boolean };
 }
 
 export interface ProjectModel {
@@ -127,6 +128,7 @@ export interface SettingsPatch {
   proxy?: { enabled?: boolean; host?: string };
   allowTemplating?: boolean;
   scenarioOverrideHeader?: boolean;
+  https?: { enabled: boolean };
 }
 
 export interface ProfileInput {

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { SettingsPatch } from '../../../src/core/model';
 import type { MutationResponse } from '../../../src/core/view';
-import { api } from '../api';
+import { api, downloadCa } from '../api';
 import { useStudio } from '../store';
 import { Banner, Field } from './ui';
 
 export function SettingsPanel() {
   const { view, act } = useStudio();
   const settings = view?.project.settings;
+  const [certs, setCerts] = useState<{ exists: boolean; caPath?: string } | null>(null);
+  const [certError, setCertError] = useState('');
+  useEffect(() => { void api<{ exists: boolean; caPath?: string }>('GET', '/api/certs').then(setCerts).catch((e: Error) => setCertError(e.message)); }, []);
   const [port, setPort] = useState(String(settings?.port ?? ''));
   const [proxyHost, setProxyHost] = useState(settings?.proxy.host ?? '');
 
@@ -47,6 +50,25 @@ export function SettingsPanel() {
         Allow devices on my network (LAN access)
       </label>
       {lan && <Banner tone="warn">LAN access is on: the mock server listens on {settings.host}. Only needed for physical iOS devices; turn it off otherwise.</Banner>}
+
+      <h3>Local HTTPS</h3>
+      <p className="muted small">Create a local CA and server certificate for this project. Recreate them if your LAN address changes.</p>
+      <button className="button" disabled={certs?.exists} onClick={() => {
+        if (window.confirm('Create a local CA and server certificate for this project?')) {
+          void api<{ exists: boolean; caPath?: string }>('POST', '/api/certs', { confirm: true }).then(setCerts).catch((e: Error) => setCertError(e.message));
+        }
+      }}>Create certificates</button>
+      {certError && <Banner tone="warn">{certError}</Banner>}
+      <label className="inline"><input type="checkbox" disabled={!certs?.exists} checked={settings.https?.enabled ?? false} onChange={(e) => void patch({ https: { enabled: e.target.checked } })} /> Enable HTTPS</label>
+      {certs?.exists && <><button className="button" onClick={() => void downloadCa().catch((e: Error) => setCertError(e.message))}>Download CA certificate</button>
+        <p className="small">iOS Simulator: <code>xcrun simctl keychain booted add-root-cert {certs.caPath}</code></p>
+        <p className="small">iOS device: install the CA certificate as a profile, then enable full trust for it in Settings → General → About → Certificate Trust Settings.</p>
+        <p className="small">Android: install the CA as a user certificate. In the debug network security configuration, trust user certificates:</p>
+        <pre>{`<network-security-config>
+    <debug-overrides>
+        <trust-anchors><certificates src="user" /></trust-anchors>
+    </debug-overrides>
+</network-security-config>`}</pre></>}
 
       <h3>Scenario override</h3>
       <label className="inline"><input type="checkbox" checked={settings.scenarioOverrideHeader} onChange={(e) => void patch({ scenarioOverrideHeader: e.target.checked })} /> Enable X-Mock-Scenario override header</label>

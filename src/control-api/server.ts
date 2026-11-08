@@ -409,6 +409,14 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
     return { port, lan, snippets: connectionSnippets(port, lan) };
   });
 
+  app.get('/api/certs', async () => service.certStatus());
+  app.post('/api/certs', async (request) => {
+    if (asObject(request.body).confirm !== true) throw invalid('Certificate creation requires confirmation.');
+    service.createCerts();
+    return service.certStatus();
+  });
+  app.get('/api/certs/ca', async (_request, reply) => reply.type('application/x-pem-file').header('Content-Disposition', 'attachment; filename="mockbrew-ca.pem"').send(service.caCertificate()));
+
   // ------------------------------------------------------------------- UI
   if (hasUi) {
     await app.register(fastifyStatic, { root: uiDir, index: ['index.html'] });
