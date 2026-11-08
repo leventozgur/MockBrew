@@ -4,6 +4,8 @@ import { useStudio } from '../store';
 import { statusTone, timeOf } from '../util';
 import { Badge, MethodBadge } from './ui';
 
+const reasonText: Record<NonNullable<RequestLog['scenarioReason']>, string> = { forced: 'Selected by the X-Mock-Scenario header.', rule: 'Selected by matching conditions.', default: 'Selected as the default fallback.', fixed: 'Selected by fixed scenario mode.', sequential: 'Selected by sequential mode.', random: 'Selected by random mode.' };
+
 function Details({ log }: { log: RequestLog }) {
   const table = (title: string, headers: { key: string; value: string }[]) => (
     <div>
@@ -79,7 +81,7 @@ export function LogsPanel() {
                 <td>
                   <Badge tone={statusTone(log.status)}>{log.status}</Badge>
                 </td>
-                <td className="muted">{log.matched ? (log.scenario ?? '') : log.proxied ? 'proxied to the real backend' : 'no mock matched'}</td>
+                <td className="muted">{log.matched ? (log.scenario ?? '') : log.proxied ? 'proxied to the real backend' : 'no mock matched'} {log.scenarioReason && <Badge tone="accent" title={reasonText[log.scenarioReason]}>{log.scenarioReason}</Badge>}</td>
               </tr>
               {open === log.id && (
                 <tr>

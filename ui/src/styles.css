@@ -137,3 +137,9 @@ textarea.code { width: 100%; background: var(--code-bg); resize: vertical; }
 .prompt { max-height: 240px; }
 
 .toolbar { padding: 4px 4px 12px; gap: 6px; }
+
+.scenario-list-item { display: flex; align-items: center; gap: 2px; }
+.scenario-summary { display: block; font-size: 0.75rem; opacity: 0.75; max-width: 24rem; overflow-wrap: anywhere; }
+.conditions { border-top: 1px solid var(--border, #ddd); padding-top: 1rem; }
+.condition-row { padding: 0.5rem; border: 1px solid var(--border, #ddd); border-radius: 6px; }
+.condition-error { color: #b42318; font-size: 0.85rem; }

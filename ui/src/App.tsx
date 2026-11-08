@@ -32,6 +32,7 @@ function RuntimeControl() {
         </code>
       )}
       {view.lan && <Badge tone="warn" title="The server listens beyond this machine">LAN</Badge>}
+      <button className="button" disabled={!running} title="Restarts the server on the same port; open connections may be dropped." onClick={() => void act(() => api<MutationResponse>('POST', '/api/runtime/reset-counters'))}>Reset request counters</button>
       {running ? (
         <button className="button" onClick={() => void act(() => api<MutationResponse>('POST', '/api/runtime/stop'))}>
           Stop
@@ -83,7 +84,7 @@ export function App() {
           Safe mode: {view.safeModeNotes.join('; ')}. Allow templating in the settings only for projects you trust.
         </Banner>
       )}
-      {view.migrated && <Banner tone="info">The Mockoon environment was upgraded to the current format; saving writes the upgraded version.</Banner>}
+      {view.migrated && <Banner tone="info">The imported environment was upgraded to the current format; saving writes the upgraded version.</Banner>}
       {notice && (
         <Banner tone={notice.kind === 'error' ? 'error' : 'info'}>
           {notice.text}{' '}

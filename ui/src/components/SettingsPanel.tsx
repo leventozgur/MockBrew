@@ -48,6 +48,10 @@ export function SettingsPanel() {
       </label>
       {lan && <Banner tone="warn">LAN access is on: the mock server listens on {settings.host}. Only needed for physical iOS devices; turn it off otherwise.</Banner>}
 
+      <h3>Scenario override</h3>
+      <label className="inline"><input type="checkbox" checked={settings.scenarioOverrideHeader} onChange={(e) => void patch({ scenarioOverrideHeader: e.target.checked })} /> Enable X-Mock-Scenario override header</label>
+      <p className="muted small">An app debug menu can send this header to select a scenario by name. It is unavailable in sequential and random modes.</p>
+      <div className="row"><code>X-Mock-Scenario: &lt;scenario name&gt;</code><button className="button" onClick={() => void navigator.clipboard.writeText('X-Mock-Scenario: <scenario name>')}>Copy example</button></div>
       <h3>Real backend fallback</h3>
       <label className="inline">
         <input
@@ -99,7 +103,7 @@ export function SettingsPanel() {
         </Field>
       </div>
 
-      <h3>Mockoon templating</h3>
+      <h3>Imported templating</h3>
       <label className="inline">
         <input
           type="checkbox"
@@ -110,7 +114,7 @@ export function SettingsPanel() {
             }
           }}
         />{' '}
-        Allow Mockoon templating, data buckets, callbacks and CRUD/WebSocket routes (off by default)
+        Allow Imported templating, data buckets, callbacks and CRUD/WebSocket routes (off by default)
       </label>
       {view.safeModeNotes.length > 0 && <span className="muted small">Currently switched off: {view.safeModeNotes.join('; ')}.</span>}
 

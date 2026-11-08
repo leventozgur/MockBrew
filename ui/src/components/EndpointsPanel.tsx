@@ -7,6 +7,7 @@ import { Badge, Banner, Dialog, Field, MethodBadge } from './ui';
 import { GenerateDialog, type GenerateResult } from './GenerateDialog';
 import { ModelCheckDialog } from './ModelCheckDialog';
 import { ScenarioEditor } from './ScenarioEditor';
+import { ConditionsEditor, ruleSummary } from './ConditionsEditor';
 
 function NewEndpointDialog({ collection, onClose, onCreated }: { collection: Collection; onClose(): void; onCreated(id: string): void }) {
   const { act } = useStudio();
@@ -76,6 +77,7 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
   const [path, setPath] = useState(endpoint.path);
   const [description, setDescription] = useState(endpoint.description);
   const [newScenario, setNewScenario] = useState('');
+  const [dragged, setDragged] = useState<string | null>(null);
 
   useEffect(() => {
     setMethod(endpoint.method);
@@ -92,7 +94,7 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
 
   return (
     <div className="stack">
-      {endpoint.readOnly && <Banner tone="info">This route was not created by this tool (CRUD, WebSocket or an unusual method). It is shown for reference; edit it in Mockoon.</Banner>}
+      {endpoint.readOnly && <Banner tone="info">This route was not created by this tool (CRUD, WebSocket or an unusual method). It is shown for reference; edit it in the original editor.</Banner>}
       {conflicts.map((c, i) => (
         <Banner key={i} tone={c.severity === 'error' ? 'error' : 'warn'}>
           {c.message}
@@ -137,15 +139,31 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
         {endpoint.model && <Badge tone="accent" title={endpoint.model.sources.join(', ')}>model: {endpoint.model.rootType}</Badge>}
       </div>
 
+      <Field label="Response mode" hint={{ rules: 'Return the first matching scenario, or the default.', fixed: 'Always return the default scenario.', sequential: 'Return scenarios in order on successive requests.', random: 'Choose a scenario randomly.', other: 'This imported mode is not editable here.' }[endpoint.responseMode] ?? 'This imported mode is not editable here.'}>
+        <select value={endpoint.responseMode} disabled={endpoint.readOnly} onChange={(e) => void act(() => api<MutationResponse>('PATCH', `/api/endpoints/${endpoint.id}/response-mode`, { responseMode: e.target.value }))}>
+          {endpoint.responseMode === 'other' && <option value="other">Other (imported)</option>}
+          <option value="rules">Rules</option><option value="fixed">Fixed scenario</option><option value="sequential">Sequential</option><option value="random">Random</option>
+        </select>
+      </Field>
+      {(endpoint.responseMode === 'sequential' || endpoint.responseMode === 'random') && <Banner tone="warn">X-Mock-Scenario is unavailable in sequential and random modes.</Banner>}
       <h3>Scenarios</h3>
+      <p className="muted small">First matching scenario wins; the default scenario is the fallback. Drag scenarios or use the move buttons to change their order.</p>
       <div className="scenario-tabs">
-        {endpoint.scenarios.map((s) => (
-          <button key={s.id} className={`scenario-tab${current?.id === s.id ? ' scenario-tab-active' : ''}`} onClick={() => setSelectedScenario(s.id)}>
-            <span className={`dot${s.active ? ' dot-on' : ''}`} title={s.active ? 'Served now' : 'Not served'} />
-            {s.name}
-            <span className="muted"> {s.statusCode}</span>
-          </button>
-        ))}
+        {endpoint.scenarios.map((s, index) => {
+          const move = (to: number) => {
+            const ids = endpoint.scenarios.map((item) => item.id);
+            ids.splice(index, 1); ids.splice(to, 0, s.id);
+            void act(() => api<MutationResponse>('PUT', `/api/endpoints/${endpoint.id}/scenario-order`, { scenarioIds: ids }));
+          };
+          return <div className="scenario-list-item" key={s.id} draggable={!endpoint.readOnly} onDragStart={() => setDragged(s.id)} onDragEnd={() => setDragged(null)} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const from = endpoint.scenarios.findIndex((item) => item.id === dragged); if (from < 0 || from === index) return; const ids = endpoint.scenarios.map((item) => item.id); const [id] = ids.splice(from, 1); ids.splice(index, 0, id); void act(() => api<MutationResponse>('PUT', `/api/endpoints/${endpoint.id}/scenario-order`, { scenarioIds: ids })); setDragged(null); }}>
+            <button className={`scenario-tab${current?.id === s.id ? ' scenario-tab-active' : ''}`} onClick={() => setSelectedScenario(s.id)}>
+              {s.name} <span className="muted">{s.statusCode}</span> {s.active && <Badge tone="ok">default</Badge>}
+              <span className="scenario-summary">{s.rules.length ? s.rules.map(ruleSummary).join(` ${s.rulesOperator} `) : 'No conditions'}</span>
+            </button>
+            <button className="icon-button" aria-label={`Move ${s.name} up`} disabled={endpoint.readOnly || index === 0} onClick={() => move(index - 1)}>↑</button>
+            <button className="icon-button" aria-label={`Move ${s.name} down`} disabled={endpoint.readOnly || index === endpoint.scenarios.length - 1} onClick={() => move(index + 1)}>↓</button>
+          </div>;
+        })}
         {!endpoint.readOnly && (
           <span className="scenario-new">
             <input value={newScenario} onChange={(e) => setNewScenario(e.target.value)} placeholder="New scenario" size={14} />
@@ -170,7 +188,7 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
         <>
           <div className="row">
             {current.active ? (
-              <Badge tone="ok">served by the mock server</Badge>
+              <Badge tone="ok">default scenario</Badge>
             ) : (
               <button className="button" disabled={endpoint.readOnly} onClick={() => void act(() => api<MutationResponse>('PUT', `/api/endpoints/${endpoint.id}/active-scenario`, { scenarioId: current.id }))}>
                 Serve this scenario
@@ -189,6 +207,7 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
               Delete scenario
             </button>
           </div>
+          <ConditionsEditor key={`${current.id}:${JSON.stringify([current.rules, current.rulesOperator])}`} endpoint={endpoint} scenario={current} />
           <ScenarioEditor key={current.id} endpoint={endpoint} scenario={current} violations={view?.violations[current.id] ?? []} />
         </>
       )}

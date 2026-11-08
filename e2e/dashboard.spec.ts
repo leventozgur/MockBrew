@@ -91,3 +91,57 @@ test('dashboard scenarios, live switching, request log and local generation', as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+
+test('conditional responses, override and request reasons', async ({ page }) => {
+  await access('dist/ui/index.html');
+  const dir = await mkdtemp(join(tmpdir(), 'mock-studio-rules-e2e-'));
+  const mockPort = await freePort();
+  const uiPort = await freePort();
+  const init = spawnSync(process.execPath, ['dist/cli/main.js', 'init', dir, '--port', String(mockPort)], { encoding: 'utf8' });
+  expect(init.status, init.stderr).toBe(0);
+  const child = spawn(process.execPath, ['dist/cli/main.js', 'ui', '-p', dir, '--port', String(uiPort)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      let output = '';
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for CLI launch URL')), 30000);
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        const match = output.match(/Studio UI: (http:\/\/127\.0\.0\.1:\d+\/#token=\S+)/);
+        if (match) { clearTimeout(timer); resolve(match[1]); }
+      });
+      child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+      child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`UI exited (${code}): ${output}`)); });
+    });
+    await page.goto(url);
+    await page.getByPlaceholder('New collection').fill('Rules');
+    await page.getByPlaceholder('New collection').press('Enter');
+    await page.getByTitle('Add endpoint').click();
+    const dialog = page.getByRole('dialog', { name: 'New endpoint in Rules' });
+    await dialog.getByLabel('Path').fill('/conditional');
+    await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+    await page.getByPlaceholder('New scenario').fill('Authorized');
+    await page.getByRole('button', { name: 'Add', exact: true }).last().click();
+    await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Authorized');
+    await page.getByRole('textbox', { name: 'Status', exact: true }).fill('201');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Add condition' }).click();
+    await page.getByLabel('Condition 1 modifier').fill('X-Test');
+    await page.getByLabel('Condition 1 value').fill('yes');
+    await page.getByRole('button', { name: 'Save conditions' }).click();
+    await expect(page.getByRole('button', { name: 'Save conditions' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Start server' }).click();
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    const mockUrl = `http://127.0.0.1:${mockPort}/conditional`;
+    expect((await fetch(mockUrl, { headers: { 'X-Test': 'yes' } })).status).toBe(201);
+    expect((await fetch(mockUrl)).status).toBe(200);
+    expect((await fetch(mockUrl, { headers: { 'X-Mock-Scenario': 'Authorized' } })).status).toBe(201);
+    await page.getByRole('button', { name: 'Requests', exact: true }).click();
+    await expect(page.getByRole('row').filter({ hasText: '/conditional' }).filter({ hasText: 'forced' })).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: '/conditional' }).filter({ hasText: 'rule' })).toBeVisible();
+  } finally {
+    child.kill('SIGTERM');
+    if (child.exitCode === null && child.signalCode === null) await once(child, 'exit');
+    await rm(dir, { recursive: true, force: true });
+  }
+});
