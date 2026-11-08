@@ -269,11 +269,12 @@ Design: [Import and export](ARCHITECTURE.md#import-and-export).
 
 **Exit criteria:** Round-trip test (export -> import produces the same project); synthetic fixture test for every import format; malformed files are rejected without writing anything; recording mode is tested with a local fake backend and sensitive headers are not written to the file.
 
-**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+**Status (2026-11-08): done (backend, CLI, MCP, control API and dashboard).**
 - Bundle `*.mockbrew.json` export/import with preview, hash-approved apply and conflict strategies (skip / rename / replace) in one atomic save; converters for Postman v2.1, OpenAPI 3.0/3.1 JSON (YAML must be converted first), HAR 1.2 and cURL with warnings for unsupported items; export to bundle, Postman v2.1 and OpenAPI. CLI `mockbrew import` / `mockbrew export`, MCP `preview_import`, `apply_import`, `export_bundle`, control API routes.
 - Record mode: while proxying, unmatched requests answered by the backend are captured in memory (sensitive and hop-by-hop headers stripped, sensitive-looking body keys warned, size-limited, truncated recordings cannot be saved), then previewed and saved as endpoints/scenarios with path-pattern overrides. MCP `start_recording`, `stop_recording`, `list_recordings`, `preview_recordings`, `save_recordings`; control API routes. Note: the engine buffers a proxied response fully before its transaction event.
 - Tests: `test/transfer-bundle.test.ts`, `test/import-formats.test.ts`, `test/record-transfer.test.ts`, MCP OpenAPI import (164 tests passing).
-- Open: dashboard import dialog, export menu and recording panel.
+- Dashboard: import dialog (file or paste, format choice, preview with conflicts and warnings, conflict strategy), export menu (bundle/Postman/OpenAPI, collection selection), recording panel (start/stop, path pattern editing, preview, save). E2E covers Postman import, bundle export and serving a recorded response after the backend stops.
+- Open: a multi-collection export from the dashboard combines one request per collection, so edits made during the download can produce a mixed snapshot.
 
 ### Milestone 13: End-user distribution and updates
 
@@ -315,12 +316,22 @@ Deferred from M5 (user approval, 2026-11-08).
 
 **Exit criteria:** Generate schema-compliant output for each subtype in synthetic fixtures; unsupported patterns are still explicitly reported.
 
+**Status (2026-11-08): implemented for Kotlin; partial for Swift.**
+- Kotlin `sealed class`/`sealed interface` -> `oneOf` with a discriminator (Kotlinx `@SerialName`, `@JsonClassDiscriminator`, project `classDiscriminator`; configurable discriminator for Gson/Moshi with a custom-adapter warning; moshi-sealed generator strings). Inherited fields from Kotlin open/abstract bases and Swift Codable base classes (with a warning about Swift synthesis). Deterministic per-subtype generation, mixed subtypes in arrays, `generate --subtype`, MCP `subtype` argument. Synthetic fixtures in `test/models.test.ts`.
+- Limits: sealed declarations with some separate-line annotations are misparsed by the bundled Kotlin grammar and reported as `unsupported-sealed-syntax`; generic superclass arguments are not substituted; Swift associated-value enums and hand-written decoders remain reported.
+- Real-world scan (2026-11-08, clones deleted afterwards): Now in Android: 294 types, issues unresolved-type 147, delegated-property 16, syntax-error 8, computed-property 5. JetBrains Compose Multiplatform template: 4 types, computed-property 2. Unresolved types are mostly framework/library types outside the scanned folder.
+
 ### Milestone 16: Device connectivity
 
 - **Connection screen:** Base URLs and QR codes for emulators, simulators, and physical devices in the dashboard; the QR code also links to a short guide explaining use of `X-Mock-Scenario`.
 - **Local HTTPS:** Generate a local CA and certificate per project (with user approval); document Android `network_security_config` and iOS device trust steps. HTTP remains the default.
 
 **Exit criteria:** Manually verify QR connection and HTTPS requests on physical Android and iOS devices.
+
+**Status (2026-11-08): implemented; physical-device checks open.**
+- Connection screen: copyable base URLs and SVG QR codes per target (Android Emulator, iOS Simulator, `adb reverse`, LAN when enabled) using `qrcode-generator` 1.4.4 (MIT), with `X-Mock-Scenario` and debug network notes.
+- Local HTTPS (off by default): `mockbrew certs create|show|delete` and the dashboard create a local CA and server certificate (SANs for localhost, 127.0.0.1, ::1, 10.0.2.2 and LAN IPs) after confirmation, stored under `~/.mockbrew/certs/<project>` with 0600 keys, never in the project folder; only the public CA can be downloaded through the control API; CA install guidance for Android and iOS. Tests: QR generation, certificate SANs/permissions, HTTPS request trusted with the generated CA (`test/connectivity.test.ts`), E2E connect screen.
+- Open: certificate creation requires OpenSSL on PATH (a JS implementation would be needed for Windows without OpenSSL); recreate certificates when LAN addresses change; QR scanning, CA install and HTTPS on physical devices not tested.
 
 ### Milestone 17: Additional protocols (as needed)
 
