@@ -77,6 +77,7 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
   const [path, setPath] = useState(endpoint.path);
   const [description, setDescription] = useState(endpoint.description);
   const [newScenario, setNewScenario] = useState('');
+  const [requestPicking, setRequestPicking] = useState(false);
   const [dragged, setDragged] = useState<string | null>(null);
 
   useEffect(() => {
@@ -139,6 +140,16 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
         {endpoint.model && <Badge tone="accent" title={endpoint.model.sources.join(', ')}>model: {endpoint.model.rootType}</Badge>}
       </div>
 
+      {['POST', 'PUT', 'PATCH'].includes(endpoint.method) && <section className="stack">
+        <h3>Request model</h3>
+        <p className="muted small">Validate incoming JSON against a Kotlin or Swift type. Invalid requests use the selected scenario.</p>
+        <div className="row"><button className="button" disabled={endpoint.readOnly} onClick={() => setRequestPicking(true)}>{endpoint.requestModel ? 'Change request model…' : 'Link request model…'}</button>
+          {endpoint.requestModel && <><Badge tone="accent">{endpoint.requestModel.rootType}</Badge><button className="button" disabled={endpoint.readOnly} onClick={() => void act(() => api<MutationResponse>('DELETE', `/api/endpoints/${endpoint.id}/request-model`))}>Unlink</button></>}</div>
+        {endpoint.requestModel && <Field label="Invalid-request scenario"><select disabled={endpoint.readOnly} value={endpoint.invalidRequestScenarioId ?? ''} onChange={(e) => void act(() => api<MutationResponse>('PUT', `/api/endpoints/${endpoint.id}/request-model`, { model: endpoint.requestModel, invalidRequestScenarioId: e.target.value }))}>
+          {!endpoint.invalidRequestScenarioId && <option value="">Default 422</option>}{endpoint.scenarios.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.statusCode})</option>)}
+        </select></Field>}
+      </section>}
+      {requestPicking && <GenerateDialog onClose={() => setRequestPicking(false)} onResult={(result) => { void act(() => api<MutationResponse>('PUT', `/api/endpoints/${endpoint.id}/request-model`, { model: result.link })); }} />}
       <Field label="Response mode" hint={{ rules: 'Return the first matching scenario, or the default.', fixed: 'Always return the default scenario.', sequential: 'Return scenarios in order on successive requests.', random: 'Choose a scenario randomly.', other: 'This imported mode is not editable here.' }[endpoint.responseMode] ?? 'This imported mode is not editable here.'}>
         <select value={endpoint.responseMode} disabled={endpoint.readOnly} onChange={(e) => void act(() => api<MutationResponse>('PATCH', `/api/endpoints/${endpoint.id}/response-mode`, { responseMode: e.target.value }))}>
           {endpoint.responseMode === 'other' && <option value="other">Other (imported)</option>}

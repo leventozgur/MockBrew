@@ -6,10 +6,16 @@ import { useStudio } from '../store';
 import { Banner, Field } from './ui';
 
 export function SettingsPanel() {
-  const { view, act } = useStudio();
+  const { view, act, applyView } = useStudio();
   const settings = view?.project.settings;
   const [certs, setCerts] = useState<{ exists: boolean; caPath?: string } | null>(null);
   const [certError, setCertError] = useState('');
+  const [variables, setVariables] = useState<Record<string, string>>({});
+  const [variableName, setVariableName] = useState('');
+  const [variableValue, setVariableValue] = useState('');
+  const [variableError, setVariableError] = useState('');
+  const loadVariables = () => api<Record<string, string>>('GET', '/api/variables').then(setVariables).catch((e: Error) => setVariableError(e.message));
+  useEffect(() => { void loadVariables(); }, []);
   useEffect(() => { void api<{ exists: boolean; caPath?: string }>('GET', '/api/certs').then(setCerts).catch((e: Error) => setCertError(e.message)); }, []);
   const [port, setPort] = useState(String(settings?.port ?? ''));
   const [proxyHost, setProxyHost] = useState(settings?.proxy.host ?? '');
@@ -28,6 +34,12 @@ export function SettingsPanel() {
 
   return (
     <div className="panel stack narrow">
+      <h3>Project variables</h3>
+      <Banner tone="warn">Values are stored in plain text in the project file. Do not store secrets.</Banner>
+      <table className="kv"><tbody>{Object.entries(variables).map(([name, value]) => <tr key={name}><td><code>{name}</code></td><td>{value}</td><td><button className="button" onClick={() => { setVariableName(name); setVariableValue(value); }}>Edit</button> <button className="button" onClick={() => void api<MutationResponse>('DELETE', `/api/variables/${encodeURIComponent(name)}`).then((result) => { applyView(result.view); return loadVariables(); }).catch((e: Error) => setVariableError(e.message))}>Delete</button></td></tr>)}</tbody></table>
+      <div className="row"><Field label="Variable name" hint="Letters, digits and underscores; start with a letter or underscore."><input value={variableName} onChange={(e) => setVariableName(e.target.value)} /></Field><Field label="Variable value"><input value={variableValue} onChange={(e) => setVariableValue(e.target.value)} /></Field>
+      <button className="button" disabled={!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variableName)} onClick={() => void api<MutationResponse>('PUT', '/api/variables', { [variableName]: variableValue }).then((result) => { applyView(result.view); setVariableName(''); setVariableValue(''); setVariableError(''); return loadVariables(); }).catch((e: Error) => setVariableError(e.message))}>Save variable</button></div>
+      {variableName && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(variableName) && <span className="small">Invalid variable name.</span>}{variableError && <Banner tone="error">{variableError}</Banner>}
       <h3>Server</h3>
       <div className="row">
         <Field label="Port">
