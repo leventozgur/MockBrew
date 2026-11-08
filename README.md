@@ -66,37 +66,81 @@ Check the installation with `mockbrew --version`.
 
 ## Usage
 
-Keep mock files in the mobile application repository (for example, `mocks/`) and share them through Git.
+Keep project files in the application repository (for example, `mocks/`) and share them through Git.
 
-**First-time setup (one team member):**
+### Create, edit, and serve a project
 
 ```sh
-cd <application-repository>
-mockbrew init mocks --name "Shop API"     # mocks/shop-api.environment.json + shop-api.studio.json
-mockbrew ui -p mocks --root . --open        # local web UI (--root: directory from which model files may be read)
-git add mocks && git commit -m "Add mocks"
+mockbrew init mocks --name "Shop API"
+mockbrew ui -p mocks --root . --open
+mockbrew serve -p mocks
 ```
 
-**Everyone else (after `git pull`):**
+`init` creates an empty project. The UI listens on loopback and can read model files under `--root`. `serve` runs active collections without the UI. Android Emulator uses `http://10.0.2.2:3000/`; iOS Simulator uses `http://localhost:3000/`.
+
+### Conditional responses and profiles
+
+Set scenario rules in the dashboard to select a response from request headers, query values, route parameters, body fields, cookies, or request order. For an app debug menu, add `X-Mock-Scenario: <scenario name>` to a request to force that scenario; this override works in rule mode. Sequential and random modes bypass rules, so the header does not apply there.
+
+Save test profiles in the dashboard to switch scenarios across endpoints. List them or run one directly:
 
 ```sh
-mockbrew serve -p mocks                     # runs active collections at http://127.0.0.1:3000
-mockbrew ui -p mocks --root . --open        # or edit and run them in the UI
+mockbrew profiles list -p mocks
+mockbrew serve -p mocks --profile "Session expired"
 ```
 
-Point the application's debug build at the mock: Android Emulator `http://10.0.2.2:3000/`, iOS Simulator `http://localhost:3000/`. For debug `network_security_config` / ATS settings and physical-device steps, run `mockbrew snippets`.
-
-Other commands:
+### Check model drift
 
 ```sh
-mockbrew generate -m app/model -t "BaseResponse<User>" \
-  -p mocks --collection Users --method GET --path /users/:id   # save a scenario from a model
-mockbrew check -p mocks --root .                            # check for model changes (exit 1 if changed; for CI)
+mockbrew check -p mocks --root .
+mockbrew check -p mocks --root . --fix       # preview body updates
+mockbrew check -p mocks --root . --fix --yes # apply the preview
+```
+
+The check compares saved model-linked bodies with current model source. `--fix` previews changes; `--yes` applies that preview. Model source files are read, never executed.
+
+### Import, export, and record
+
+```sh
+mockbrew import collection.json -p mocks --format postman --dry-run
+mockbrew export bundle -p mocks -o mocks.mockbrew.json
+mockbrew export postman -p mocks -o collection.json
 mockbrew export openapi -p mocks -o openapi.json
-mockbrew mcp -p mocks --root .                              # MCP for Kiro / Copilot
 ```
 
-Run `mockbrew --help` for the full command list. For MCP setup and development, see the [Development Guide](docs/DEVELOPMENT.md).
+Import supports MockBrew bundles, Postman v2.1, OpenAPI JSON, HAR, and cURL. OpenAPI YAML must first be converted to JSON. Import previews can be reviewed in the dashboard or with `--dry-run`; export formats are bundle, Postman, and OpenAPI. Recording mode is available in the dashboard and through MCP: while proxying, unmatched backend responses can be previewed and saved as scenarios.
+
+### MCP clients
+
+Install the server configuration with `mockbrew mcp install claude|codex|gemini|copilot|kiro`. The command invokes the client's official setup command when available, or prints instructions; it does not edit client configuration files. The server exposes the `mockbrew://guide` resource. See the [Development Guide](docs/DEVELOPMENT.md#mcp-setup).
+
+### Optional AI generation
+
+```sh
+mockbrew ui -p mocks --root . --ai auto --open
+# or select providers explicitly: --ai copilot,claude,codex,gemini
+```
+
+AI generation is off by default. Each prompt and result requires preview and approval; the local generator remains available as fallback. "Limited isolation" means a provider's CLI cannot be given the same process/configuration isolation as Copilot, so the UI labels that provider and presents the limitation before approval.
+
+### Connect devices and optional HTTPS
+
+The dashboard connection screen shows base URLs and QR codes for supported emulator, simulator, `adb reverse`, and LAN targets. Physical-device QR scanning and HTTPS have not been verified. HTTP is the default; create project certificates only if HTTPS is needed:
+
+```sh
+mockbrew certs create -p mocks
+mockbrew snippets --port 3000
+```
+
+Certificate creation requires interactive confirmation. Certificates are stored outside the project. LAN access requires explicit `--lan` selection and makes the mock reachable to devices on the network.
+
+### Diagnose setup
+
+```sh
+mockbrew doctor -p mocks
+```
+
+See `mockbrew <command> --help` for all command options.
 
 ## About `npm audit` warnings
 

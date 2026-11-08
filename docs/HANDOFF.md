@@ -6,6 +6,20 @@ This document is the summary and starting point that the person (or agent) conti
 - **No new code was developed while preparing this report.** Only the status was measured (lint, build, test), and this document was written.
 - **Verification labels:** "Run today" means run as a command while preparing this report. "Recorded" means based on a ROADMAP/DEVELOPMENT record and not rerun in this session.
 
+## Update 2026-11-08 (evening)
+
+This dated update reflects the current project state. The roadmap status blocks are authoritative for feature status and evidence.
+
+- **Product:** MockBrew; CLI/package command `mockbrew`.
+- **Milestones:** M6 is in progress (local git repository, no remote; release/CI and other readiness checks remain open). M7a/M7b are done. M8 and M9 are done; background model watching remains open. M10 is implemented, but real-client registration and end-to-end use with a real LLM remain unverified. M11 is implemented; real-provider generation is unverified and Kiro CLI support is not yet available. M12 is done; dashboard multi-collection export can produce a mixed snapshot if edits happen during download. M13 build tooling is done; no release workflow has run, Linux/Windows/macOS x64 binaries and notarization remain unverified, and package-manager repositories are open. M15 is implemented for Kotlin and partial for Swift. M16 is implemented; physical-device QR, CA trust, and HTTPS checks remain open. M14 is planned and not merged.
+- **Other open checks:** GitHub name and CI are unverified because there is no remote; real Mockoon desktop editing, physical devices, Windows/Linux, and real-client/provider flows remain unverified as listed in the roadmap and development matrix.
+- **Git:** This is a local git worktree with no remote. Work is organized on wave branches and merged into `main` per wave. This documentation task is on `wave6/docs-refresh`.
+- **Current verification in this documentation task:** `npm run build:server`, `npm run lint`, and `npm run build` completed successfully. CLI help was collected after the server build. `npm test` ran but failed in this sandbox because loopback listeners return `EPERM`; 65 tests failed, 107 passed, and 12 unhandled errors were reported.
+
+## Current code map
+
+See [Development Guide - Module boundaries](DEVELOPMENT.md#module-boundaries) for the full table. Recent additions include `src/core/import/` for import readers, `src/core/model-update.ts` for drift updates, `src/core/certs.ts` for local HTTPS certificates, `src/core/recording.ts` for proxy recording, `src/ai/registry.ts` for provider discovery, `src/mcp/tools/` for MCP tools, and `src/cli/commands/` for CLI commands.
+
 ## 1. What is the project
 
 **MockBrew** is a free, offline-first mock API tool for Android, iOS, and Kotlin Multiplatform teams. It runs locally (localhost) before the backend is ready.
@@ -171,13 +185,13 @@ Single package, separate directories. Detailed table: [Development guide - Modul
 | `src/parser/` | tree-sitter AST -> language-independent IR; `kotlin/{gson,kotlinx,moshi}.ts`, `swift/`; `host.ts` + `worker.ts` in a separate child process | no |
 | `src/schema/` | IR -> JSON Schema, naming/date settings, Ajv validation | no |
 | `src/generator/` | Deterministic local generator (field-name heuristics, variants, seed) | no |
-| `src/core/` | Domain types, `ProjectService`, conflict checking, model service, schema diff, OpenAPI, safe paths | no |
+| `src/core/` | Domain types, import (`import/`), model updates, certificates, recording, `ProjectService`, conflict checking, schema diff, OpenAPI, safe paths | no |
 | `src/store/` | Mockoon environment + sidecar, atomic writes, file watching | **yes** |
 | `src/runtime/` | Derived environment, safe mode, running the engine, masked logs | **yes** |
 | `src/control-api/` | Fastify, loopback only, UI assets | no |
-| `src/mcp/` | MCP tools | no |
-| `src/ai/` | Provider interface, process runner (`cli-runner.ts`), Copilot provider, prompt | no |
-| `src/cli/` | Commands (`main.ts` entry point) | no |
+| `src/mcp/` | MCP guide resource and narrow tools (`tools/`) | no |
+| `src/ai/` | Provider registry, process runner (`cli-runner.ts`), provider adapters, prompt | no |
+| `src/cli/` | Command entry point (`main.ts`) and command modules (`commands/`) | no |
 | `ui/` | React + Vite interface; imports pure type files such as `src/core/view.ts` | no |
 | `test/` | Vitest; `fixtures/` contains synthetic Kotlin/Swift models; tests run on `dist/` | - |
 
