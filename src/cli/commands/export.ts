@@ -1,7 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { buildOpenApi } from '../../core/openapi.js';
-import { exportBundle } from '../../core/import/bundle.js';
 import { exportPostman } from '../../core/import/postman-export.js';
 import { type Io, UsageError, openProject } from '../common.js';
 
@@ -35,7 +34,8 @@ export async function exportCommand(argv: string[], io: Io): Promise<void> {
   const service = await openProject(values.project);
   try {
     const project = service.model();
-    const bundle = positionals[0] === 'openapi' ? undefined : exportBundle(project, values.collection);
+    // The service export includes project variables; the bare converter does not.
+    const bundle = positionals[0] === 'openapi' ? undefined : service.exportBundle(values.collection);
     const selectedProject = values.collection ? { ...project, collections: project.collections.filter((c) => values.collection?.includes(c.name) || values.collection?.includes(c.id)) } : project;
     if (values.collection && selectedProject.collections.length !== values.collection.length) throw new UsageError('Selected collection was not found or repeated.');
     const document = positionals[0] === 'bundle' ? bundle : positionals[0] === 'postman' ? exportPostman(bundle!, project.name, service.view().runtime.url ?? `http://localhost:${project.settings.port}`) : buildOpenApi(selectedProject, {

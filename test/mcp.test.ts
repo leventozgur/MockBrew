@@ -47,9 +47,9 @@ describe('MCP server', () => {
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
     // MCP clients (e.g. Codex with approval "never") treat write tools without destructiveHint as destructive.
     const implicit = tools.filter((t) => t.annotations?.readOnlyHint !== true && typeof t.annotations?.destructiveHint !== 'boolean').map((t) => t.name);
-    expect(implicit.filter((name) => !['apply_import', 'save_recordings', 'start_recording', 'stop_recording'].includes(name))).toEqual([]);
+    expect(implicit).toEqual([]);
     const destructive = tools.filter((t) => t.annotations?.destructiveHint === true).map((t) => t.name).sort();
-    expect(destructive).toEqual(expect.arrayContaining(['apply_model_update', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario']));
+    expect(destructive).toEqual(expect.arrayContaining(['apply_import', 'apply_model_update', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario']));
     expect(destructive).not.toContain('save_profile');
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
     expect((await call('apply_model_update', { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'invalid' })).isError).toBe(true);
