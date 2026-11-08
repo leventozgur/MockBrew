@@ -1,5 +1,5 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +11,7 @@ let dir: string;
 let client: Client;
 
 async function connect(extraArgs: string[] = []): Promise<void> {
-  const transport = new StdioClientTransport({ command: 'node', args: [cli, 'mcp', '-p', path.join(dir, 'mocks'), '--root', dir, ...extraArgs], cwd: dir, stderr: 'ignore' });
+  const transport = new StdioClientTransport({ command: 'node', args: [cli, 'mcp', '-p', path.join(dir, 'mocks'), '--root', dir, ...extraArgs], cwd: dir, stderr: 'ignore', env: { ...getDefaultEnvironment(), ...(process.env.CHOKIDAR_USEPOLLING ? { CHOKIDAR_USEPOLLING: process.env.CHOKIDAR_USEPOLLING } : {}) } });
   client = new Client({ name: 'test-client', version: '1.0.0' });
   await client.connect(transport);
 }
@@ -42,10 +42,68 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['generate_sample', 'get_schema', 'list_collections', 'parse_model', 'save_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
     const save = tools.find((t) => t.name === 'save_scenario');
     expect(save?.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('manages collections, endpoints and scenarios with previews, validation and conflicts', async () => {
+    const collectionId = (await call('create_collection', { name: 'One' })).json().id;
+    const secondId = (await call('create_collection', { name: 'Two' })).json().id;
+    expect((await call('update_collection', { collectionId, name: 'Renamed' })).isError).toBe(false);
+    expect((await call('set_collection_active', { collectionId, active: false })).isError).toBe(false);
+    const endpointId = (await call('create_endpoint', { collectionId, method: 'GET', path: '/one' })).json().id;
+    expect((await call('update_endpoint', { endpointId, path: '/moved', description: 'Test', collectionId: secondId })).isError).toBe(false);
+    const conflict = await call('create_endpoint', { collectionId: secondId, method: 'GET', path: '/moved' });
+    expect(conflict.isError).toBe(true);
+    expect(conflict.text).toMatch(/conflict|duplicate/i);
+    const saved = (await call('save_scenario', { collection: 'Two', method: 'GET', path: '/moved', scenarioName: 'Other', body: '{"ok":true}' })).json();
+    const listing = (await call('list_endpoints', { collectionId: secondId })).json();
+    expect(listing.endpoints[0].activeScenario).toBe(saved.scenarioId);
+    const firstScenario = listing.endpoints[0].scenarios.find((s: { id: string }) => s.id !== saved.scenarioId).id;
+    expect((await call('update_scenario', { endpointId, scenarioId: firstScenario, name: 'Edited', statusCode: 201, headers: [{ key: 'X-Test', value: 'yes' }], body: '{"ok":false}', latencyMs: 1 })).isError).toBe(false);
+    expect((await call('update_scenario', { endpointId, scenarioId: firstScenario, body: '{bad' })).isError).toBe(true);
+    expect((await call('set_active_scenario', { endpointId, scenarioId: firstScenario })).isError).toBe(false);
+    const before = await studioText();
+    expect((await call('delete_scenario', { endpointId, scenarioId: saved.scenarioId })).json().deleted).toBe(false);
+    expect((await call('delete_endpoint', { endpointId })).json().deleted).toBe(false);
+    expect((await call('delete_collection', { collectionId: secondId })).json().deleted).toBe(false);
+    expect(await studioText()).toBe(before);
+    expect((await call('delete_scenario', { endpointId, scenarioId: saved.scenarioId, confirm: true })).json().deleted).toBe(true);
+    expect((await call('delete_endpoint', { endpointId, confirm: true })).json().deleted).toBe(true);
+    expect((await call('delete_collection', { collectionId: secondId, confirm: true })).json().deleted).toBe(true);
+    expect((await call('check_models')).json()).toEqual([]);
+  });
+
+  it('validates updated success bodies against the linked model and resulting status', async () => {
+    const saved = (await call('save_scenario', { collection: 'C', method: 'GET', path: '/p', body: '{"id":1,"title":"a","price":1,"tags":[]}', type: 'Product', paths: ['models/kotlin/Generic.kt'] })).json();
+    const invalid = await call('update_scenario', { endpointId: saved.endpointId, scenarioId: saved.scenarioId, body: '{"id":"wrong"}' });
+    expect(invalid.isError).toBe(true);
+    expect(invalid.text).toContain('Product');
+    expect((await call('update_scenario', { endpointId: saved.endpointId, scenarioId: saved.scenarioId, statusCode: 404, body: '{"error":true}' })).isError).toBe(false);
+    expect((await call('update_scenario', { endpointId: saved.endpointId, scenarioId: saved.scenarioId, statusCode: 200 })).isError).toBe(true);
+    expect((await call('check_models')).json()[0].status).toBe('ok');
+  });
+
+  it('starts and stops the runtime and returns masked logs from real requests', async () => {
+    await call('save_scenario', { collection: 'C', method: 'GET', path: '/ping', body: '{"ok":true}' });
+    expect((await call('server_status')).json()).toMatchObject({ running: false, host: '127.0.0.1', port: 38777 });
+    const started = (await call('start_server')).json();
+    expect(started).toMatchObject({ running: true, host: '127.0.0.1', port: 38777 });
+    expect(started.activeCollections).toHaveLength(1);
+    const response = await fetch('http://127.0.0.1:38777/ping?token=secret', { headers: { authorization: 'secret' } });
+    expect(response.status).toBe(200);
+    let logs: any[] = [];
+    for (let i = 0; i < 30 && logs.length === 0; i++) {
+      logs = (await call('get_request_logs', { limit: 1 })).json().logs;
+      if (!logs.length) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(logs).toHaveLength(1);
+    expect(JSON.stringify(logs)).not.toContain('secret');
+    expect(logs[0]).not.toHaveProperty('requestBody');
+    expect(logs[0]).not.toHaveProperty('responseBody');
+    expect((await call('stop_server')).json().running).toBe(false);
   });
 
   it('turns "use this model" into a validated scenario saved to the project file', async () => {

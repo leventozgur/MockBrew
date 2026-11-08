@@ -6,6 +6,7 @@ import type { ModelLink } from '../core/model.js';
 import type { ProjectService } from '../core/service.js';
 import { VARIANTS } from '../generator/index.js';
 import { validateBody } from '../schema/index.js';
+import { registerProjectTools } from './tools/project.js';
 
 const MAX_SOURCE_CHARS = 1_000_000;
 
@@ -16,6 +17,7 @@ Typical flow for "make a mock for this model":
 2. get_schema for the response type (generics are allowed, e.g. BaseResponse<List<User>>). Use naming/dateFormat when the app's decoder is configured for snake_case or epoch dates.
 3. Write the JSON body (generate_sample gives a deterministic baseline you can edit), then check it with validate_body.
 4. save_scenario stores it as a scenario of GET/POST/... <path> in a collection. The body is validated against the model and rejected when it does not match.
+Use list_collections and list_endpoints to find IDs, manage collections, endpoints and scenarios with their respective tools, and review deletion previews before confirming. Start the mock server with start_server, inspect server_status and get_request_logs, and stop it with stop_server. check_models reports model drift without changing files.
 Nothing here executes model code or touches files outside the project root.`;
 
 const sourceFiles = z
@@ -41,7 +43,7 @@ const modelShape = {
   framework: z.enum(['auto', 'gson', 'kotlinx', 'moshi']).optional().describe('Kotlin JSON library; auto detects the annotations.'),
 };
 
-function text(value: unknown) {
+export function text(value: unknown) {
   return { content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }] };
 }
 
@@ -54,7 +56,7 @@ function failure(error: unknown) {
 }
 
 /** Wraps a handler so that failures reach the AI client as readable tool errors. */
-function guarded<A>(handler: (args: A) => Promise<ReturnType<typeof text>>) {
+export function guarded<A>(handler: (args: A) => Promise<ReturnType<typeof text>>) {
   return async (args: A) => {
     try {
       return await handler(args);
@@ -71,6 +73,7 @@ function input(args: { files?: { name: string; content: string }[]; paths?: stri
 export function createMcpServer(service: ProjectService, version: string): McpServer {
   const server = new McpServer({ name: 'mock-api-studio', version }, { instructions });
   const readOnly = { readOnlyHint: true, openWorldHint: false };
+  registerProjectTools(server, service);
 
   server.registerTool(
     'list_collections',

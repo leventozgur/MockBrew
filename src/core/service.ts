@@ -287,6 +287,19 @@ export class ProjectService extends EventEmitter {
     return this.mutate((doc) => doc.updateScenario(endpointId, scenarioId, input));
   }
 
+  /** Update a scenario only if its resulting success body matches its linked model. */
+  updateValidatedScenario(endpointId: string, scenarioId: string, input: ScenarioInput): Promise<void> {
+    return this.mutate((doc) => {
+      doc.updateScenario(endpointId, scenarioId, input);
+      const endpoint = doc.snapshot().collections.flatMap((c) => c.endpoints).find((e) => e.id === endpointId);
+      const scenario = endpoint?.scenarios.find((s) => s.id === scenarioId);
+      if (endpoint?.model && scenario && isModelBound(scenario.statusCode)) {
+        const result = validateAgainstSchema(endpoint.model.schema, scenario.body);
+        if (!result.valid) throw invalid(`The body does not match ${endpoint.model.rootType}: ${result.errors.slice(0, 5).map((e) => `${e.path} ${e.message}`).join('; ')}`, result.errors);
+      }
+    });
+  }
+
   deleteScenario(endpointId: string, scenarioId: string): Promise<void> {
     return this.mutate((doc) => doc.removeScenario(endpointId, scenarioId));
   }
