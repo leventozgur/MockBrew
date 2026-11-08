@@ -19,7 +19,7 @@ export async function certsCommand(argv: string[], io: Io): Promise<void> {
       let answer: string;
       try { answer = await rl.question('Create a local CA and server certificate for this project? [y/N] '); } finally { rl.close(); }
       if (!/^y(es)?$/i.test(answer.trim())) { io.out('Cancelled.'); return; }
-      service.createCerts();
+      await service.createCerts();
     } else if (action === 'delete') {
       service.deleteCerts();
       io.out('Certificates deleted.');

@@ -1,12 +1,15 @@
 import { createHash, X509Certificate } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { promisify } from 'node:util';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import https from 'node:https';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import qrcode from 'qrcode-generator';
 import { expect, it } from 'vitest';
-import { certificatePaths, createCertificates } from '../src/core/certs.js';
+import { certificatePaths } from '../src/core/certs.js';
 import { lanAddresses } from '../src/core/snippets.js';
 import { ProjectService } from '../src/core/service.js';
 import { startControlApi } from '../src/control-api/server.js';
@@ -37,11 +40,22 @@ it('creates project certificates outside the project and serves HTTPS with the C
     expect(before.url).toMatch(/^http:/);
     expect((await fetch(`http://127.0.0.1:${port}/`)).status).toBe(404);
     const projectFiles = await readdir(project);
-    createCertificates(project, root);
+    const created = await fetch(`${api.url}/api/certs`, { method: 'POST', headers: { Authorization: `Bearer ${api.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ confirm: true }) });
+    expect(created.status).toBe(200);
+    expect((await created.json()).exists).toBe(true);
     const paths = certificatePaths(project, root);
     const ca = await readFile(paths.ca);
     const cert = new X509Certificate(await readFile(paths.cert));
     const authority = new X509Certificate(ca);
+    const forge = createRequire(import.meta.url)('node-forge');
+    const caParsed = forge.pki.certificateFromPem(ca.toString());
+    const serverParsed = forge.pki.certificateFromPem(await readFile(paths.cert, 'utf8'));
+    expect(caParsed.getExtension('basicConstraints')).toMatchObject({ critical: true, cA: true });
+    expect(caParsed.getExtension('keyUsage')).toMatchObject({ critical: true, keyCertSign: true, cRLSign: true });
+    expect(serverParsed.getExtension('basicConstraints')).toMatchObject({ critical: true, cA: false });
+    expect(serverParsed.getExtension('keyUsage')).toMatchObject({ critical: true, digitalSignature: true, keyEncipherment: true });
+    expect(serverParsed.getExtension('extKeyUsage')).toMatchObject({ serverAuth: true });
+    expect(cert.verify(authority.publicKey)).toBe(true);
     expect(cert.subjectAltName).toContain('DNS:localhost');
     for (const ip of ['127.0.0.1', '0:0:0:0:0:0:0:1', '10.0.2.2', ...lanAddresses()]) expect(cert.subjectAltName).toContain(ip);
     expect((Date.parse(cert.validTo) - Date.parse(cert.validFrom)) / 86400000).toBeLessThanOrEqual(825);
@@ -65,4 +79,17 @@ it('creates project certificates outside the project and serves HTTPS with the C
     if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
     await rm(root, { recursive: true, force: true });
   }
+}, 30000);
+
+
+it('creates certificates when PATH contains no OpenSSL', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'mockbrew-no-openssl-'));
+  try {
+    const emptyPath = path.join(root, 'empty');
+    await mkdir(emptyPath);
+    const moduleUrl = new URL('../dist/core/certs.js', import.meta.url).href;
+    const project = path.join(root, 'project');
+    await promisify(execFile)(process.execPath, ['--input-type=module', '-e', `import { createCertificates } from ${JSON.stringify(moduleUrl)}; await createCertificates(${JSON.stringify(project)}, ${JSON.stringify(root)});`], { env: { ...process.env, PATH: emptyPath } });
+    expect(new X509Certificate(await readFile(certificatePaths(project, root).cert)).subjectAltName).toContain('DNS:localhost');
+  } finally { await rm(root, { recursive: true, force: true }); }
 }, 30000);

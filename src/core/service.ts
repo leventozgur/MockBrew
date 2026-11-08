@@ -146,7 +146,7 @@ export class ProjectService extends EventEmitter {
   }
 
   certStatus() { return showCertificates(this.location.dir); }
-  createCerts() { createCertificates(this.location.dir); }
+  createCerts() { return createCertificates(this.location.dir); }
   deleteCerts() { if (this.document.studio.settings.https.enabled) throw invalid('Disable HTTPS before deleting certificates.'); deleteCertificates(this.location.dir); }
   caCertificate() { if (!this.certStatus().exists) throw invalid('Create certificates first.'); return readFileSync(certificatePaths(this.location.dir).ca, 'utf8'); }
 
