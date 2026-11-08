@@ -1,11 +1,11 @@
 {
   "version": "VERSION",
   "description": "Offline mock API studio for mobile development",
-  "homepage": "https://github.com/OWNER/REPO",
+  "homepage": "https://github.com/leventozgur/MockBrew",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/OWNER/REPO/releases/download/vVERSION/mockbrew-windows-x64.exe#/mockbrew.exe",
+      "url": "https://github.com/leventozgur/MockBrew/releases/download/vVERSION/mockbrew-windows-x64.exe#/mockbrew.exe",
       "hash": "SHA256_WINDOWS_X64"
     }
   },

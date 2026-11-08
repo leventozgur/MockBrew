@@ -3,6 +3,27 @@
   "version": "0.1.0",
   "description": "Offline-first mock API studio for Android, iOS and Kotlin Multiplatform development.",
   "license": "MIT",
+  "author": "Levent Özgür",
+  "homepage": "https://github.com/leventozgur/MockBrew#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leventozgur/MockBrew.git"
+  },
+  "bugs": {
+    "url": "https://github.com/leventozgur/MockBrew/issues"
+  },
+  "keywords": [
+    "mock",
+    "mock-server",
+    "api",
+    "android",
+    "ios",
+    "kotlin",
+    "swift",
+    "kotlin-multiplatform",
+    "mcp",
+    "openapi"
+  ],
   "type": "module",
   "bin": {
     "mockbrew": "dist/cli/main.js"

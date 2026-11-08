@@ -36,18 +36,18 @@ The package is not yet published to npm, so there are two tested installation op
 ```sh
 mkdir -p ~/tools/mockbrew && cd ~/tools/mockbrew
 npm init -y
-npm install git+ssh://git@<host>/<org>/<repo>.git     # the prepare script builds the tool (a few minutes)
+npm install github:leventozgur/MockBrew              # the prepare script builds the tool (a few minutes)
 
 # Add to ~/.zshrc:
 export PATH="$HOME/tools/mockbrew/node_modules/.bin:$PATH"
 ```
 
-To update, repeat `npm install git+ssh://...` in the same directory (append `#<tag>` to pin a specific version).
+To update, repeat `npm install github:leventozgur/MockBrew` in the same directory (append `#<tag>` to pin a specific version).
 
 **2. Clone and build**
 
 ```sh
-git clone <repo-url> ~/tools/mockbrew && cd ~/tools/mockbrew
+git clone https://github.com/leventozgur/MockBrew.git ~/tools/mockbrew && cd ~/tools/mockbrew
 npm ci        # installs dependencies and builds
 
 # Add to ~/.zshrc:
@@ -56,7 +56,7 @@ alias mockbrew='node ~/tools/mockbrew/dist/cli/main.js'
 
 To update, run `git pull && npm ci`. (`npm link` is also an option; npm's global directory must be writable.)
 
-A project that already uses Node (for example, React Native or KMP web) can add the tool as a dependency with `npm install -D git+ssh://...` and run `npx mockbrew <command>`.
+A project that already uses Node (for example, React Native or KMP web) can add the tool as a dependency with `npm install -D github:leventozgur/MockBrew` and run `npx mockbrew <command>`.
 
 **After npm publication**, use `npx mockbrew <command>` or `npm install -g mockbrew`.
 
