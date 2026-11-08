@@ -150,3 +150,9 @@ textarea.code { width: 100%; background: var(--code-bg); resize: vertical; }
 .model-diff pre span { display: block; min-height: 1em; }
 .model-diff-added { background: rgba(35, 160, 80, .18); }
 .model-diff-removed { background: rgba(210, 60, 60, .18); }
+
+.profile-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.profile-card-active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.profile-endpoint { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 6px; border-bottom: 1px solid var(--border); }
+.profile-endpoint > span { flex: 1; min-width: 180px; }
+.topbar { flex-wrap: wrap; }

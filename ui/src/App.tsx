@@ -4,27 +4,30 @@ import { api } from './api';
 import { ConnectPanel } from './components/ConnectPanel';
 import { EndpointsPanel } from './components/EndpointsPanel';
 import { LogsPanel } from './components/LogsPanel';
+import { ProfilesPanel } from './components/ProfilesPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Badge, Banner } from './components/ui';
 import { useStudio } from './store';
 
-type Tab = 'endpoints' | 'logs' | 'connect' | 'settings';
+type Tab = 'endpoints' | 'profiles' | 'logs' | 'connect' | 'settings';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'endpoints', label: 'Endpoints' },
+  { id: 'profiles', label: 'Profiles' },
   { id: 'logs', label: 'Requests' },
   { id: 'connect', label: 'Connect app' },
   { id: 'settings', label: 'Settings' },
 ];
 
 function RuntimeControl() {
-  const { view, act } = useStudio();
+  const { view, profiles, act, refreshProfiles } = useStudio();
   if (!view) return null;
   const { runtime } = view;
   const running = runtime.state === 'running';
   const blocking = view.conflicts.filter((c) => c.severity === 'error').length > 0;
   return (
     <div className="runtime">
+      {profiles?.profiles.find((p) => p.id === profiles.activeProfileId) && <><Badge tone="accent" title="Active profile">{profiles.profiles.find((p) => p.id === profiles.activeProfileId)?.name}</Badge><button className="button" onClick={() => void act(() => api<MutationResponse>('POST', '/api/profiles/deactivate')).then(refreshProfiles)}>Turn off</button></>}
       <Badge tone={running ? 'ok' : runtime.state === 'error' ? 'error' : 'neutral'}>{running ? 'running' : runtime.state}</Badge>
       {running && runtime.url && (
         <code className="mono" title="Base URL on this machine">
@@ -95,6 +98,7 @@ export function App() {
       )}
       <div className="content">
         {tab === 'endpoints' && <EndpointsPanel />}
+        {tab === 'profiles' && <ProfilesPanel />}
         {tab === 'logs' && <LogsPanel />}
         {tab === 'connect' && <ConnectPanel />}
         {tab === 'settings' && <SettingsPanel />}

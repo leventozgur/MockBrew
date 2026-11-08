@@ -207,3 +207,65 @@ test('model drift preview updates selected body and preserves manual values', as
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('profiles switch two endpoints and explain request selection', async ({ page }) => {
+  await access('dist/ui/index.html');
+  const dir = await mkdtemp(join(tmpdir(), 'mockbrew-profiles-e2e-'));
+  const mockPort = await freePort();
+  const uiPort = await freePort();
+  const init = spawnSync(process.execPath, ['dist/cli/main.js', 'init', dir, '--port', String(mockPort)], { encoding: 'utf8' });
+  expect(init.status, init.stderr).toBe(0);
+  const child = spawn(process.execPath, ['dist/cli/main.js', 'ui', '-p', dir, '--port', String(uiPort)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    const url = await new Promise<string>((resolve, reject) => {
+      let output = '';
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for CLI launch URL')), 30000);
+      child.stdout.on('data', (chunk: Buffer) => {
+        output += chunk.toString();
+        const match = output.match(/Studio UI: (http:\/\/127\.0\.0\.1:\d+\/#token=\S+)/);
+        if (match) { clearTimeout(timer); resolve(match[1]); }
+      });
+      child.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
+      child.on('exit', (code) => { clearTimeout(timer); reject(new Error(`UI exited (${code}): ${output}`)); });
+    });
+    await page.goto(url);
+    await page.getByPlaceholder('New collection').fill('Profile fixtures');
+    await page.getByPlaceholder('New collection').press('Enter');
+    for (const path of ['/first', '/second']) {
+      await page.getByTitle('Add endpoint').click();
+      const dialog = page.getByRole('dialog', { name: 'New endpoint in Profile fixtures' });
+      await dialog.getByLabel('Path').fill(path);
+      await dialog.getByRole('button', { name: 'Create', exact: true }).click();
+      await expect(dialog).not.toBeVisible();
+      await expect(page.getByLabel('Path', { exact: true })).toHaveValue(path);
+      await page.getByPlaceholder('New scenario').fill('Unauthorized');
+      await page.getByRole('button', { name: 'Add', exact: true }).last().click();
+      await expect(page.getByRole('textbox', { name: 'Name', exact: true })).toHaveValue('Unauthorized');
+      await page.getByRole('textbox', { name: 'Status', exact: true }).fill('401');
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    }
+    await page.getByRole('button', { name: 'Start server' }).click();
+    await expect(page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Profiles', exact: true }).click();
+    await page.getByRole('button', { name: 'Create profile' }).click();
+    const editor = page.getByRole('dialog', { name: 'Create profile' });
+    await editor.getByLabel('Name', { exact: true }).fill('Session expired');
+    await editor.getByRole('button', { name: 'All endpoints → first 401 scenario' }).click();
+    await expect(editor.getByLabel('Scenario for GET /first')).toContainText('Unauthorized (401)');
+    await editor.getByRole('button', { name: 'Save profile' }).click();
+    await expect(editor).not.toBeVisible();
+    await page.getByRole('button', { name: 'Activate', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Turn off' })).toBeVisible();
+    for (const path of ['/first', '/second']) expect((await fetch(`http://127.0.0.1:${mockPort}${path}`)).status).toBe(401);
+    await page.getByRole('button', { name: 'Requests', exact: true }).click();
+    for (const path of ['/first', '/second']) await expect(page.getByRole('row').filter({ hasText: path }).filter({ hasText: 'profile: Session expired' })).toBeVisible();
+    await page.getByRole('button', { name: 'Turn off' }).click();
+    await expect(page.getByRole('button', { name: 'Turn off' })).not.toBeVisible();
+    for (const path of ['/first', '/second']) expect((await fetch(`http://127.0.0.1:${mockPort}${path}`)).status).toBe(200);
+  } finally {
+    child.kill('SIGTERM');
+    if (child.exitCode === null && child.signalCode === null) await once(child, 'exit');
+    await rm(dir, { recursive: true, force: true });
+  }
+});

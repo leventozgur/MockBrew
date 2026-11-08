@@ -1,5 +1,5 @@
 import { type ReactNode, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import type { MutationResponse, PollResponse, ProjectView, RequestLog } from '../../src/core/view';
+import type { MutationResponse, PollResponse, ProfilesView, ProjectView, RequestLog } from '../../src/core/view';
 import { ApiError, api } from './api';
 
 const MAX_LOGS = 500;
@@ -11,6 +11,8 @@ export interface Notice {
 
 interface Studio {
   view: ProjectView | null;
+  profiles: ProfilesView | null;
+  refreshProfiles(): Promise<void>;
   logs: RequestLog[];
   notice: Notice | null;
   dismissNotice(): void;
@@ -30,6 +32,7 @@ export function useStudio(): Studio {
 
 export function StudioProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState<ProjectView | null>(null);
+  const [profiles, setProfiles] = useState<ProfilesView | null>(null);
   const [logs, setLogs] = useState<RequestLog[]>([]);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sessionLost, setSessionLost] = useState(false);
@@ -40,6 +43,13 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     revision.current = next.revision;
     setView(next);
   }, []);
+
+  const refreshProfiles = useCallback(async () => {
+    try { setProfiles(await api<ProfilesView>('GET', '/api/profiles')); }
+    catch (error) { setNotice({ kind: 'error', text: error instanceof Error ? error.message : String(error) }); }
+  }, []);
+
+  useEffect(() => { if (view) void refreshProfiles(); }, [view?.revision, refreshProfiles]);
 
   useEffect(() => {
     let stopped = false;
@@ -86,8 +96,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [act]);
 
   const value = useMemo<Studio>(
-    () => ({ view, logs, notice, dismissNotice: () => setNotice(null), sessionLost, act, clearLogs }),
-    [view, logs, notice, sessionLost, act, clearLogs],
+    () => ({ view, profiles, refreshProfiles, logs, notice, dismissNotice: () => setNotice(null), sessionLost, act, clearLogs }),
+    [view, profiles, refreshProfiles, logs, notice, sessionLost, act, clearLogs],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
