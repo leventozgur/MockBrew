@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -391,7 +392,9 @@ describe('Mockoon CLI compatibility', () => {
       scenarios: [{ name: 'Success', body: '{"id":7}' }, { name: 'Err', statusCode: 500, body: '{"e":1}' }],
     });
     const port = await freePort();
-    child = spawn('node', ['node_modules/.bin/mockoon-cli', 'start', '--data', path.join(dir, 'orders-api.environment.json'), '--port', String(port)], { stdio: 'ignore' });
+    // node_modules/.bin entries are .cmd shims on Windows; run the CLI's JS entry with Node instead.
+    const engineCli = path.join(path.dirname(createRequire(import.meta.url).resolve('@mockoon/cli/package.json')), 'bin', 'run.js');
+    child = spawn(process.execPath, [engineCli, 'start', '--data', path.join(dir, 'orders-api.environment.json'), '--port', String(port)], { stdio: 'ignore' });
     let response: Response | undefined;
     for (let i = 0; i < 60 && !response; i++) {
       try {

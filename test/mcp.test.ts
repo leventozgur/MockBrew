@@ -11,7 +11,7 @@ let dir: string;
 let client: Client;
 
 async function connect(extraArgs: string[] = []): Promise<void> {
-  const transport = new StdioClientTransport({ command: 'node', args: [cli, 'mcp', '-p', path.join(dir, 'mocks'), '--root', dir, ...extraArgs], cwd: dir, stderr: 'ignore', env: { ...getDefaultEnvironment(), ...(process.env.CHOKIDAR_USEPOLLING ? { CHOKIDAR_USEPOLLING: process.env.CHOKIDAR_USEPOLLING } : {}) } });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '-p', path.join(dir, 'mocks'), '--root', dir, ...extraArgs], cwd: dir, stderr: 'ignore', env: { ...getDefaultEnvironment(), ...(process.env.CHOKIDAR_USEPOLLING ? { CHOKIDAR_USEPOLLING: process.env.CHOKIDAR_USEPOLLING } : {}) } });
   client = new Client({ name: 'test-client', version: '1.0.0' });
   await client.connect(transport);
 }

@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 function run(args: string[]) {
-  const result = spawnSync('node', [cli, ...args], { encoding: 'utf8', cwd: dir });
+  const result = spawnSync(process.execPath, [cli, ...args], { encoding: 'utf8', cwd: dir });
   return { code: result.status, out: result.stdout, err: result.stderr };
 }
 
@@ -39,7 +39,7 @@ async function freePort(): Promise<number> {
 function startLongRunning(args: string[], readyText: RegExp): Promise<{ output: () => string }> {
   return new Promise((resolve, reject) => {
     let buffer = '';
-    child = spawn('node', [cli, ...args], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, [cli, ...args], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] });
     const onData = (chunk: Buffer) => {
       buffer += chunk.toString();
       if (readyText.test(buffer)) resolve({ output: () => buffer });

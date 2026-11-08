@@ -71,10 +71,10 @@ describe('model body updates', () => {
       await fs.writeFile(modelFile, 'data class M(val name: String, val email: String, val age: Int)');
       const cli = path.resolve('dist/cli/main.js');
       const args = [cli, 'check', '-p', path.join(dir, 'mocks'), '--root', dir, '--fix'];
-      const before = spawnSync('node', args, { encoding: 'utf8' });
+      const before = spawnSync(process.execPath, args, { encoding: 'utf8' });
       expect(before.status).toBe(1);
       expect(before.stdout).toContain('added $.age');
-      const applied = spawnSync('node', [...args, '--yes'], { encoding: 'utf8' });
+      const applied = spawnSync(process.execPath, [...args, '--yes'], { encoding: 'utf8' });
       expect(applied.status).toBe(1);
     } finally { await service.close(); await fs.rm(dir, { recursive: true, force: true }); }
   });

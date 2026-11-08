@@ -140,7 +140,7 @@ describe('model drift in a project', () => {
 
   it('fails the check command on drift and succeeds when nothing changed', async () => {
     const cli = path.resolve('dist/cli/main.js');
-    const run = () => spawnSync('node', [cli, 'check', '-p', path.join(dir, 'mocks'), '--root', dir], { encoding: 'utf8' });
+    const run = () => spawnSync(process.execPath, [cli, 'check', '-p', path.join(dir, 'mocks'), '--root', dir], { encoding: 'utf8' });
     const clean = run();
     expect(clean.status).toBe(0);
     expect(clean.stdout).toContain('1 ok, 0 drifted');
@@ -217,7 +217,7 @@ describe('OpenAPI export', () => {
   it('is written by the export command', async () => {
     const cli = path.resolve('dist/cli/main.js');
     const out = path.join(dir, 'openapi.json');
-    const run = spawnSync('node', [cli, 'export', 'openapi', '-p', path.join(dir, 'mocks'), '-o', out, '--title', 'Contract'], { encoding: 'utf8' });
+    const run = spawnSync(process.execPath, [cli, 'export', 'openapi', '-p', path.join(dir, 'mocks'), '-o', out, '--title', 'Contract'], { encoding: 'utf8' });
     expect(run.status).toBe(0);
     expect(JSON.parse(await fs.readFile(out, 'utf8')).info.title).toBe('Contract');
   });
