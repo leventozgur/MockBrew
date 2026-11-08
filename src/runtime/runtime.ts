@@ -8,6 +8,8 @@ import { type RuntimeEnvironment, type RuntimeOverrides, buildRuntimeEnvironment
 import { captureTransaction } from '../core/recording.js';
 import { invalid } from '../core/errors.js';
 import { maskHeaders, maskQuery } from './masking.js';
+import { FrontServer } from './front.js';
+import type { Server as HttpServer } from 'node:http';
 
 export type { RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
 
@@ -39,6 +41,8 @@ function stringifyBody(body: unknown): string | undefined {
 /** Runs the Mockoon engine for a project and keeps a bounded, masked request log. */
 export class MockRuntime extends EventEmitter {
   private server: MockoonServer | undefined;
+  private front: FrontServer | undefined;
+  private enginePort = 0;
   private current: RuntimeEnvironment | undefined;
   private state: RuntimeState = 'stopped';
   private error: string | undefined;
@@ -125,40 +129,54 @@ export class MockRuntime extends EventEmitter {
     return this.status();
   }
 
-  private launch(runtimeEnv: RuntimeEnvironment): Promise<void> {
+  private engineEnvironment(environment: Environment): Environment {
+    return { ...environment, hostname: '127.0.0.1', port: this.enginePort };
+  }
+
+  private async launch(runtimeEnv: RuntimeEnvironment): Promise<void> {
     const { environment } = runtimeEnv;
     this.current = runtimeEnv;
     this.lastHost = environment.hostname;
     this.lastPort = environment.port;
     this.setState('starting');
-    const server = this.createServer(environment);
-
-    return new Promise<void>((resolve, reject) => {
-      let settled = false;
-      server.on('error', (code, original) => {
-        const friendly = ERROR_MESSAGES[code]?.(environment.port, environment.hostname);
-        const message = friendly ?? `${code}${original ? `: ${original.message}` : ''}`;
-        if (!settled) {
-          settled = true;
-          this.server = undefined;
-          this.setState('error', message);
-          reject(new Error(message));
-          return;
-        }
-        this.emit('server-error', { code, message });
-      });
-      server.once('started', () => {
-        settled = true;
-        this.server = server;
-        this.startedAt = new Date().toISOString();
-        this.setState('running');
-        resolve();
-      });
-      server.once('stopped', () => {
-        if (this.server === server) this.server = undefined;
-      });
-      server.start();
+    this.enginePort = 0;
+    const server = this.createServer(this.engineEnvironment(environment));
+    let started = false;
+    server.on('error', (code, original) => {
+      if (started) this.emit('server-error', { code, message: `${code}${original ? `: ${original.message}` : ''}` });
     });
+    try {
+      const tls = environment.tlsOptions.enabled ? { cert: environment.tlsOptions.certPath, key: environment.tlsOptions.keyPath } : undefined;
+      const front = new FrontServer({ host: environment.hostname, port: environment.port, enginePort: 0, tls, onError: (error) => this.emit('server-error', { code: 'FRONT_ERROR', message: error.message }) });
+      this.front = front;
+      // Reserve the public port first so the OS cannot assign it to the engine.
+      await front.listen();
+      await new Promise<void>((resolve, reject) => {
+        const onError = (code: ServerErrorCodes, original: Error | null) => reject(original ?? new Error(code));
+        server.once('error', onError);
+        server.once('started', () => { server.off('error', onError); resolve(); });
+        server.start();
+      });
+      started = true;
+      this.server = server;
+      // The engine does not expose its listener address; read the OS-assigned port from its server.
+      const listener = (server as unknown as { serverInstance: HttpServer }).serverInstance;
+      const address = listener.address();
+      if (!address || typeof address === 'string') throw new Error('Engine listener has no TCP address.');
+      this.enginePort = address.port;
+      // Listener settings no longer control the bound socket; retain the public values for engine behavior.
+      server.updateEnvironment(environment);
+      front.setEnginePort(this.enginePort);
+      this.startedAt = new Date().toISOString();
+      this.setState('running');
+    } catch (error) {
+      await this.stopServer();
+      const code = (error as NodeJS.ErrnoException).code;
+      const mapped = code === 'EADDRINUSE' ? ServerErrorCodes.PORT_ALREADY_USED : code === 'EACCES' || code === 'ERR_SOCKET_BAD_PORT' ? ServerErrorCodes.PORT_INVALID : code === 'EADDRNOTAVAIL' ? ServerErrorCodes.HOSTNAME_UNAVAILABLE : code === 'ENOTFOUND' ? ServerErrorCodes.HOSTNAME_UNKNOWN : undefined;
+      const message = (mapped && ERROR_MESSAGES[mapped]?.(environment.port, environment.hostname)) || (error as Error).message;
+      this.setState('error', message);
+      throw new Error(message);
+    }
   }
 
   /** Applies a changed project to the running server without restarting it (unless host or port changed). */
@@ -190,13 +208,17 @@ export class MockRuntime extends EventEmitter {
     await this.launch(current);
   }
 
-  private stopServer(): Promise<void> {
+  private async stopServer(): Promise<void> {
+    const front = this.front;
+    this.front = undefined;
+    await front?.close();
     const server = this.server;
-    if (!server) return Promise.resolve();
-    return new Promise<void>((resolve) => {
+    this.server = undefined;
+    if (server) await new Promise<void>((resolve) => {
       server.once('stopped', () => resolve());
       server.stop();
     });
+    this.enginePort = 0;
   }
 
   async stop(): Promise<void> {
