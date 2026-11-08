@@ -172,6 +172,11 @@ Principle: Every new feature is implemented in core and made available through *
 
 **Exit criteria:** CI is green on macOS, Linux, and Windows with Node 22/24 (once the GitHub repository is opened); the full test suite is stable across 5 consecutive runs; no company references remain in the repository; the SEA prototype result (works/does not work and why) is recorded; a name decision is made.
 
+**Status (2026-11-08): in progress.**
+- Done: git repository (local, no remote) with company references removed; flaky `test/ai.test.ts` fixed (5 consecutive focused runs and full suite passed); `windows-latest` added to the CI matrix; docs translated to English; CONTRIBUTING, SECURITY, CHANGELOG and issue/PR templates; `npm audit` note and periodic dependency review step; Playwright E2E suite (`npm run test:e2e`, 1 scenario covering scenario editing, live switching, logs and local generation; passed locally) and a separate CI job.
+- SEA prototype: works on macOS arm64 (see [SEA research](research/SEA.md)); release work remains for M13.
+- Open: CI has never run (no GitHub repository yet); name decision pending: `mock-api-studio` is taken on npm and GitHub, `@mock-api-studio` scope ownership unverified (research 2026-11-08).
+
 ### Milestone 7: Conditional responses (rule engine)
 
 First step (2026-11-08 correction): **close MCP gaps in existing features**: create/update/delete endpoints, update/delete/activate scenarios, create/activate collections, start/stop/check server status, and recent request logs. Since the primary use is LLMs working through MCP, this does not wait for M10.
@@ -187,6 +192,12 @@ Expose Mockoon's response rules, which already work in the file, through the dom
 - MCP/CLI: add/remove/reorder rules and endpoint mode.
 
 **Exit criteria:** The same endpoint returns different status/body based on header, query, route parameter, and body conditions; the default scenario is returned when no rule matches; `X-Mock-Scenario` overrides every rule; sequential mode returns 500 on request 1 and 200 on request 2; rules apply without restart; the file behaves the same with Mockoon CLI; all are verified with integration tests.
+
+**Status (2026-11-08): M7a done, M7b (UI) open.**
+- MCP gaps closed: 16 tools for collections, endpoints, scenarios, server start/stop/status, masked request logs and model check (`test/mcp.test.ts`).
+- M7a: rules, AND/OR, invert, endpoint modes, scenario ordering, `X-Mock-Scenario` (by name or id, case-insensitive header name, can be disabled), `scenarioReason` in logs, request counter reset, sidecar `schemaVersion: 2` with v1 migration, control API routes and MCP tools `set_scenario_rules`, `set_endpoint_mode`, `reorder_scenarios`, `reset_request_counters`. Verified with real HTTP integration tests (123 tests passing).
+- Known limits: `X-Mock-Scenario` is not available in sequential/random modes (the engine bypasses rules there; a runtime note is shown). `scenarioReason` is left empty when the engine cannot tell whether the default scenario matched by rule or as fallback. Resetting counters restarts the server on the same port, which may drop open connections. In safe mode a response with any unsafe rule has all its rules ignored.
+- Open: M7b dashboard rule editor, ordering and "why this response" display; manual check with the engine's desktop app.
 
 ### Milestone 8: Test profiles and network conditions
 
