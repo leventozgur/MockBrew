@@ -181,6 +181,8 @@ describe('MCP server', () => {
 
     const sample = (await call('generate_sample', { paths: ['models/kotlin/Generic.kt'], type: 'BaseResponse<Product>', seed: 1 })).json();
     expect(sample.body.data).toHaveProperty('title');
+    const sealed = (await call('generate_sample', { files: [{ name: 'Shape.kt', content: 'sealed class Shape\ndata class Circle(val radius: Int) : Shape()\nobject Empty : Shape()' }], type: 'Shape', subtype: 'Empty' })).json();
+    expect(sealed.body).toEqual({ type: 'Empty' });
 
     const body = JSON.stringify({ data: { id: 5, title: 'Blue mug', price: 12.5, tags: ['kitchen'] }, code: 0, message: null });
     const saved = await call('save_scenario', {
@@ -253,6 +255,6 @@ describe('MCP server', () => {
 
   it('reports unsupported constructs to the AI client', async () => {
     const parsed = (await call('parse_model', { paths: ['models/kotlin/Unsupported.kt'] })).json();
-    expect(parsed.issues.map((i: { code: string }) => i.code)).toContain('sealed-class');
+    expect(parsed.issues.map((i: { code: string }) => i.code)).toContain('custom-serializer');
   });
 });

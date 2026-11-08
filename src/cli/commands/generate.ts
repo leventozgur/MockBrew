@@ -6,7 +6,7 @@ import { ModelService } from '../../core/model-service.js';
 import { commonAncestor, isBroadRoot } from '../../core/safe-path.js';
 import type { HttpMethod, ModelLink } from '../../core/model.js';
 import { HTTP_METHODS } from '../../core/model.js';
-import { VARIANTS, type Variant } from '../../generator/index.js';
+import { generateJson, VARIANTS, type Variant } from '../../generator/index.js';
 import type { DateFormat, GenerationSettings, NamingStrategy } from '../../schema/index.js';
 import { type Io, UsageError, formatIssue, openProject } from '../common.js';
 
@@ -14,6 +14,8 @@ export const generateHelp = `mockbrew generate --model <file|folder>... [--type 
 
 Parses Kotlin (Gson, Kotlinx Serialization, Moshi) and Swift (Codable) models without compiling them and
 prints a JSON body that matches the model. The source is parsed only, never executed.
+Kotlin sealed subtypes and class inheritance are supported when their declarations are supplied.
+Swift associated-value enums and hand-written decoders remain unsupported.
 
 Options:
   -m, --model <path>      Model file or folder (repeatable). Types may be declared in several files.
@@ -23,6 +25,9 @@ Options:
       --naming <s>        identity (default) | snake_case
       --date <f>          iso8601 (default) | epoch-seconds | epoch-millis
       --variant <v>       full (default) | minimal | empty-list
+      --class-discriminator <name>  Override the Kotlinx discriminator
+      --polymorphism-discriminator <name>  Set the Gson/Moshi discriminator
+      --subtype <Name>    Select a sealed subtype (default: first)
       --seed <value>      Same seed, same output (default 0)
       --framework <f>     auto (default) | gson | kotlinx | moshi
 
@@ -73,6 +78,9 @@ export async function generateCommand(argv: string[], io: Io): Promise<void> {
       date: { type: 'string' },
       variant: { type: 'string' },
       seed: { type: 'string' },
+      subtype: { type: 'string' },
+      'class-discriminator': { type: 'string' },
+      'polymorphism-discriminator': { type: 'string' },
       framework: { type: 'string' },
       project: { type: 'string', short: 'p' },
       collection: { type: 'string' },
@@ -89,6 +97,8 @@ export async function generateCommand(argv: string[], io: Io): Promise<void> {
   const settings: Partial<GenerationSettings> = {
     naming: choice<NamingStrategy>(values.naming, ['identity', 'snake_case'], '--naming'),
     dateFormat: choice<DateFormat>(values.date, ['iso8601', 'epoch-seconds', 'epoch-millis'], '--date'),
+    classDiscriminator: values['class-discriminator'],
+    polymorphism: values['polymorphism-discriminator'] ? { discriminator: values['polymorphism-discriminator'] } : undefined,
   };
   const variant = choice<Variant>(values.variant, VARIANTS, '--variant');
   const framework = choice(values.framework, ['auto', 'gson', 'kotlinx', 'moshi'] as const, '--framework');
@@ -127,6 +137,7 @@ export async function generateCommand(argv: string[], io: Io): Promise<void> {
   }
 
   const generated = await models.generate(input, type, { settings, variant, seed });
+  if (values.subtype) generated.body = generateJson(generated.schema, { variant, seed, subtype: values.subtype });
   for (const issue of generated.issues) io.err(formatIssue(issue));
 
   if (!values.project) {

@@ -96,7 +96,12 @@ describe('cli', () => {
     expect(schema.$schema).toContain('2020-12');
     const list = run(['generate', '-m', path.join(fixtures, 'kotlin/Unsupported.kt'), '--list']);
     expect(list.out).toContain('class Shape');
-    expect(list.err).toContain('[warning] sealed-class');
+    expect(list.err).toContain('[warning] custom-serializer');
+  });
+
+  it('selects a sealed subtype from the CLI', () => {
+    const result = run(['generate', '-m', path.join(fixtures, 'kotlin/SealedModels.kt'), '-t', 'Event', '--subtype', 'Deleted', '--class-discriminator', 'tag']);
+    expect(JSON.parse(result.out)).toEqual({ tag: 'deleted' });
   });
 
   it('applies naming and date options', () => {

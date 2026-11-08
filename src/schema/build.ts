@@ -204,6 +204,33 @@ class SchemaBuilder {
       return { title: decl.name, description: decl.unsupported.message, 'x-unsupported': decl.unsupported.code, 'x-source': source };
     }
     if (decl.kind === 'enum') return this.enumSchema(decl, source);
+    if (decl.sealed) {
+      const subtypes = this.declarations.filter((candidate) => candidate !== decl && candidate.language === decl.language &&
+        candidate.parentNames?.some((name) => this.findDecl(name, candidate) === decl));
+      if (!subtypes.length) {
+        this.issues.push({ severity: 'warning', code: 'sealed-class', message: `${decl.qualifiedName} has no resolved subtypes in the provided sources.`, type: decl.qualifiedName });
+        return { title: decl.name, 'x-unsupported': 'sealed-class', 'x-source': source };
+      }
+      const framework = decl.polymorphismFramework;
+      const discriminator = framework === 'kotlinx'
+        ? this.settings.classDiscriminator ?? decl.discriminator ?? 'type'
+        : this.settings.polymorphism?.discriminator ?? decl.discriminator ?? 'type';
+      if (framework !== 'kotlinx') this.issues.push({ severity: 'warning', code: 'custom-polymorphic-adapter', message: `${decl.qualifiedName} likely uses a custom polymorphic adapter; verify its discriminator and values.`, type: decl.qualifiedName });
+      const values = new Set<string>();
+      const oneOf = subtypes.map((subtype) => {
+        this.used.add(subtype.qualifiedName);
+        const value = framework === 'kotlinx' ? subtype.serialName ?? [subtype.packageName, subtype.qualifiedName].filter(Boolean).join('.') : subtype.name;
+        if (values.has(value)) this.issues.push({ severity: 'warning', code: 'duplicate-discriminator', message: `Duplicate discriminator value "${value}" in ${decl.qualifiedName}.`, type: decl.qualifiedName });
+        values.add(value);
+        const schema = this.buildDecl(subtype, []);
+        const properties = schema.properties as Record<string, JsonSchema>;
+        properties[discriminator] = { const: value };
+        schema.required = [...new Set([...(schema.required as string[] | undefined ?? []), discriminator])];
+        return schema;
+      });
+      return { title: decl.name, oneOf, 'x-source': source };
+    }
+
 
     if (args.length !== decl.typeParams.length) {
       this.issues.push({
@@ -219,7 +246,7 @@ class SchemaBuilder {
 
     const properties: Record<string, JsonSchema> = {};
     const required: string[] = [];
-    for (const field of decl.fields) {
+    for (const field of decl.object ? [] : this.inheritedFields(decl, new Set())) {
       const key = field.jsonName ?? applyNaming(field.name, this.settings.naming);
       const type = this.close(field.type, scope);
       const property = this.schemaFor(type, scope);
@@ -232,6 +259,33 @@ class SchemaBuilder {
     if (required.length > 0) schema.required = required;
     schema['x-source'] = source;
     return schema;
+  }
+
+
+  private inheritedFields(decl: TypeDecl, seen: Set<TypeDecl>): TypeDecl['fields'] {
+    if (seen.has(decl)) {
+      this.issues.push({ severity: 'warning', code: 'inheritance-cycle', message: `Inheritance cycle at ${decl.qualifiedName}.`, type: decl.qualifiedName });
+      return [];
+    }
+    seen.add(decl);
+    const fields: TypeDecl['fields'] = [];
+    for (const name of decl.parentNames ?? []) {
+      const parent = this.findDecl(name, decl);
+      if (!parent) {
+        this.issues.push({ severity: 'warning', code: 'inheritance', message: `Cannot resolve parent ${name} of ${decl.qualifiedName}; inherited fields may be missing.`, type: decl.qualifiedName });
+        continue;
+      }
+      this.used.add(parent.qualifiedName);
+      fields.push(...this.inheritedFields(parent, seen));
+      if (decl.language === 'swift') this.issues.push({ severity: 'warning', code: 'swift-codable-inheritance', message: `${decl.qualifiedName} inherits ${parent.qualifiedName}; subclass Codable behavior requires manual implementation and may differ.`, type: decl.qualifiedName });
+    }
+    seen.delete(decl);
+    for (const field of decl.fields) {
+      const previous = fields.findIndex((f) => f.name === field.name);
+      if (previous >= 0) fields.splice(previous, 1);
+      fields.push(field);
+    }
+    return fields;
   }
 
   private enumSchema(decl: TypeDecl, source: object): JsonSchema {

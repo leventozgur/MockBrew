@@ -149,14 +149,14 @@ describe('unsupported constructs are reported, not skipped silently', () => {
   it('reports Kotlin issues', async () => {
     const extract = await extractModels([fixture('kotlin', 'Unsupported.kt')]);
     const codes = new Set(extract.issues.map((i) => i.code));
-    for (const code of ['sealed-class', 'inheritance', 'custom-serializer', 'delegated-property', 'computed-property']) {
+    for (const code of ['custom-serializer', 'delegated-property', 'computed-property']) {
       expect(codes, code).toContain(code);
     }
     const { issues, schema } = buildSchema(extract, 'Strange');
     expect(issues.some((i) => i.code === 'unresolved-type' && i.message.includes('NotDeclaredAnywhere'))).toBe(true);
     expect(issues.every((i) => i.severity !== 'error')).toBe(true);
     expect(Object.keys(rootDef(schema).properties)).toEqual(['ok', 'custom', 'shape', 'missing']);
-    expect(def(schema, 'Shape')['x-unsupported']).toBe('sealed-class');
+    expect(def(schema, 'Shape').oneOf).toHaveLength(1);
   });
 
   it('reports Swift issues', async () => {
@@ -280,5 +280,62 @@ describe('access root helpers', () => {
     expect(isBroadRoot(path.join(os.homedir(), 'Projects', 'app'))).toBe(false);
     expect(commonAncestor('/a/b/mocks', '/a/b/app/src')).toBe('/a/b');
     expect(commonAncestor('/a/mocks', '/b/app')).toBe('/');
+  });
+});
+
+
+describe('polymorphism and inheritance', () => {
+  const files = () => [fixture('kotlin', 'SealedModels.kt')];
+  it('generates each Kotlinx subtype and applies discriminator, naming and date settings', async () => {
+    for (const subtype of ['Created', 'Deleted']) {
+      const result = await roundTrip(files(), 'Event', { naming: 'snake_case', dateFormat: 'epoch-millis', classDiscriminator: 'tag' }, { subtype });
+      expect(result.validation.errors).toEqual([]);
+      expect((result.value as any).tag).toBe(subtype === 'Created' ? 'created' : 'deleted');
+      if (subtype === 'Created') expect((result.value as any).created_at).toBeGreaterThan(1_600_000_000_000);
+      else expect(Object.keys(result.value as object)).toEqual(['tag']);
+    }
+    const normal = await roundTrip(files(), 'Event');
+    expect((normal.value as any).kind).toBe('created');
+    for (const subtype of ['Success', 'Empty']) expect((await roundTrip(files(), 'Result', {}, { subtype })).validation.valid).toBe(true);
+    const feed = await roundTrip(files(), 'Feed', {}, { seed: 3 });
+    expect(feed.validation.errors).toEqual([]);
+    expect(new Set((feed.value as any).events.map((v: any) => v.kind)).size).toBe(2);
+  });
+  it('reads Moshi sealed generator and configurable adapter discriminator', async () => {
+    const moshi = [fixture('kotlin', 'SealedMoshi.kt')];
+    const first = await roundTrip(moshi, 'Message', {}, { subtype: 'End' });
+    expect(first.value).toEqual({ category: 'End' });
+    expect(first.validation.valid).toBe(true);
+    const second = await roundTrip(moshi, 'Message', { polymorphism: { discriminator: 'kind' } });
+    expect((second.value as any).kind).toBe('Text');
+    expect(second.validation.valid).toBe(true);
+  });
+  it('resolves Gson subtypes from separate files and warns about custom adapters', async () => {
+    const sources = [
+      { name: 'Base.kt', content: 'sealed class Base' },
+      { name: 'Children.kt', content: 'data class Child(val value: String) : Base()\nobject Nothing : Base()' },
+    ];
+    const result = await roundTrip(sources, 'Base', { polymorphism: { discriminator: 'kind' } }, { subtype: 'Nothing' });
+    expect(result.value).toEqual({ kind: 'Nothing' });
+    expect(result.validation.valid).toBe(true);
+    expect(result.issues.some((i) => i.code === 'custom-polymorphic-adapter')).toBe(true);
+  });
+  it('reports sealed declarations rejected by the bundled grammar', async () => {
+    const result = await extractModels([{ name: 'BrokenGrammar.kt', content: '@Serializable\n@JsonClassDiscriminator("kind")\nsealed class Base { data class Child(val value: String): Base() }' }]);
+    expect(result.issues.some((i) => i.code === 'unsupported-sealed-syntax')).toBe(true);
+  });
+  it('includes inherited fields and warns about Swift Codable behavior', async () => {
+    const kotlin = await roundTrip([fixture('kotlin', 'InheritanceModels.kt')], 'Dog', { naming: 'snake_case' });
+    expect(kotlin.validation.valid).toBe(true);
+    expect(kotlin.value).toHaveProperty('name');
+    expect(kotlin.value).toHaveProperty('created_at');
+    const swiftInheritance = [fixture('swift', 'Inheritance.swift')];
+    const swiftResult = await roundTrip(swiftInheritance, 'Dog');
+    expect(swiftResult.validation.valid).toBe(true);
+    expect(swiftResult.value).toHaveProperty('name');
+    expect(swiftResult.issues.some((i) => i.code === 'swift-codable-inheritance')).toBe(true);
+    const parsed = await extractModels(swiftInheritance);
+    expect(parsed.issues.some((i) => i.code === 'enum-associated-values')).toBe(true);
+    expect(parsed.issues.some((i) => i.code === 'custom-decoder')).toBe(true);
   });
 });

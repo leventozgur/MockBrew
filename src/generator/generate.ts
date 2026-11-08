@@ -14,6 +14,7 @@ export const VARIANTS: readonly Variant[] = ['minimal', 'full', 'empty-list'];
 export interface GenerateOptions {
   variant?: Variant;
   seed?: string | number;
+  subtype?: string;
 }
 
 const MAX_DEPTH = 12;
@@ -22,12 +23,13 @@ interface Ctx {
   root: JsonSchema;
   variant: Variant;
   seed: string;
+  subtype?: string;
   /** $refs currently being expanded, used to cut recursive types. */
   active: Set<string>;
 }
 
 export function generateValue(schema: JsonSchema, options: GenerateOptions = {}): unknown {
-  const ctx: Ctx = { root: schema, variant: options.variant ?? 'full', seed: String(options.seed ?? 0), active: new Set() };
+  const ctx: Ctx = { root: schema, variant: options.variant ?? 'full', seed: String(options.seed ?? 0), subtype: options.subtype, active: new Set() };
   return gen(schema, ctx, '$', '', 0);
 }
 
@@ -63,6 +65,15 @@ function gen(schema: JsonSchema, ctx: Ctx, path: string, name: string, depth: nu
     if (!first || (typeof first.$ref === 'string' && ctx.active.has(first.$ref))) return null;
     return gen(first, ctx, path, name, depth);
   }
+  if (Array.isArray(schema.oneOf) && schema.oneOf.length) {
+    const choices = schema.oneOf as JsonSchema[];
+    const selected = ctx.subtype ? choices.find((s) => s.title === ctx.subtype || (s['x-source'] as { type?: string } | undefined)?.type === ctx.subtype) : undefined;
+    if (ctx.subtype && !selected) throw new Error(`Unknown subtype "${ctx.subtype}".`);
+    const index = /\[(\d+)\]$/.exec(path);
+    const offset = index ? rngFor(ctx.seed, path.replace(/\[\d+\]$/, '')).int(0, choices.length - 1) : 0;
+    return gen(selected ?? choices[index ? (Number(index[1]) + offset) % choices.length : 0] as JsonSchema, ctx, path, name, depth);
+  }
+  if ('const' in schema) return schema.const;
   const rng = rngFor(ctx.seed, path);
   if (Array.isArray(schema.enum) && schema.enum.length > 0) {
     const values = (schema.enum as unknown[]).filter((v) => v !== null);

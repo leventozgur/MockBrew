@@ -4,7 +4,7 @@ import { StudioError, invalid } from '../core/errors.js';
 import type { ModelInput } from '../core/model-service.js';
 import type { ModelLink } from '../core/model.js';
 import type { ProjectService } from '../core/service.js';
-import { VARIANTS } from '../generator/index.js';
+import { generateJson, VARIANTS } from '../generator/index.js';
 import { validateBody } from '../schema/index.js';
 import { registerGuide } from './guide.js';
 import { registerProfileTools } from './tools/profiles.js';
@@ -139,6 +139,7 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
         ...settingsShape,
         variant: z.enum(VARIANTS as [string, ...string[]]).optional().describe('full (default), minimal (required fields only) or empty-list'),
         seed: z.union([z.string(), z.number()]).optional(),
+        subtype: z.string().min(1).max(300).optional().describe('Sealed subtype name.'),
       },
       annotations: readOnly,
     },
@@ -148,7 +149,8 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
         variant: args.variant as never,
         seed: args.seed,
       });
-      return text({ body: JSON.parse(generated.body), issues: generated.issues });
+      const body = args.subtype ? generateJson(generated.schema, { variant: args.variant as never, seed: args.seed, subtype: args.subtype }) : generated.body;
+      return text({ body: JSON.parse(body), issues: generated.issues });
     }),
   );
 

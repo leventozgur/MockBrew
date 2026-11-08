@@ -7,6 +7,8 @@ export type DateFormat = 'iso8601' | 'epoch-seconds' | 'epoch-millis';
 export interface GenerationSettings {
   naming: NamingStrategy;
   dateFormat: DateFormat;
+  classDiscriminator?: string;
+  polymorphism?: { discriminator: string };
 }
 
 export const DEFAULT_SETTINGS: GenerationSettings = { naming: 'identity', dateFormat: 'iso8601' };
@@ -17,7 +19,7 @@ export function normalizeSettings(input: Partial<GenerationSettings> | undefined
   const naming = input?.naming === 'snake_case' ? 'snake_case' : 'identity';
   const dateFormat =
     input?.dateFormat === 'epoch-seconds' || input?.dateFormat === 'epoch-millis' ? input.dateFormat : 'iso8601';
-  return { naming, dateFormat };
+  return { naming, dateFormat, ...(input?.classDiscriminator ? { classDiscriminator: input.classDiscriminator } : {}), ...(input?.polymorphism?.discriminator ? { polymorphism: { discriminator: input.polymorphism.discriminator } } : {}) };
 }
 
 export interface TypeSummary {

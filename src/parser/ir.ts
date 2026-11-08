@@ -63,6 +63,13 @@ export interface TypeDecl {
   line: number;
   /** The type cannot be represented faithfully; schemas fall back to "any" for it. */
   unsupported?: UnsupportedInfo;
+  parentNames?: string[];
+  sealed?: boolean;
+  object?: boolean;
+  serialName?: string;
+  packageName?: string;
+  discriminator?: string;
+  polymorphismFramework?: KotlinFramework;
 }
 
 export interface AliasDecl {

@@ -29,6 +29,8 @@ interface Ctx {
   declarations: TypeDecl[];
   aliases: AliasDecl[];
   issues: Issue[];
+  framework: KotlinFramework;
+  packageName?: string;
 }
 
 const TYPE_NODES = ['user_type', 'nullable_type', 'function_type', 'parenthesized_type', 'not_nullable_type'];
@@ -53,6 +55,8 @@ export function extractKotlin(tree: Tree, file: string, options: ExtractOptions 
     declarations: [],
     aliases: [],
     issues: [],
+    packageName: firstChildOfType(tree.rootNode, 'package_header')?.namedChildren.find((n) => n.type === 'identifier')?.text,
+    framework: options.framework && options.framework !== 'auto' ? options.framework : tree.rootNode.text.includes('kotlinx.serialization') ? 'kotlinx' : tree.rootNode.text.includes('moshi') ? 'moshi' : 'gson',
   };
   reportSyntaxErrors(tree.rootNode, ctx);
   visitMembers(tree.rootNode, [], ctx);
@@ -80,8 +84,11 @@ function reportSyntaxErrors(root: Node, ctx: Ctx): void {
 
 function visitMembers(parent: Node, outer: string[], ctx: Ctx): void {
   for (const child of parent.namedChildren) {
-    if (child.type === 'class_declaration') extractClass(child, outer, ctx);
+    if (child.type === 'class_declaration' || child.type === 'object_declaration') extractClass(child, outer, ctx);
     else if (child.type === 'type_alias') extractAlias(child, ctx);
+    else if (child.type === 'prefix_expression' && child.text.includes('sealed')) {
+      ctx.issues.push({ severity: 'warning', code: 'unsupported-sealed-syntax', message: 'A sealed declaration could not be parsed by the Kotlin grammar; its subtypes may be missing.', file: ctx.file, line: lineOf(child) });
+    }
   }
 }
 
@@ -109,7 +116,7 @@ function typeParamsOf(node: Node): string[] {
 function extractClass(node: Node, outer: string[], ctx: Ctx): void {
   const name = firstChildOfType(node, 'type_identifier')?.text;
   if (!name) return;
-  if (hasToken(node, 'interface')) return;
+  if (hasToken(node, 'interface') && !firstChildOfType(node, 'modifiers')?.text.includes('sealed')) return;
   const qualifiedName = [...outer, name].join('.');
   const modifiers = firstChildOfType(node, 'modifiers');
   const classModifiers = modifiers ? childrenOfType(modifiers, 'class_modifier').map((m) => m.text) : [];
@@ -140,27 +147,23 @@ function extractClass(node: Node, outer: string[], ctx: Ctx): void {
     });
   }
 
-  if (classModifiers.includes('sealed')) {
-    decl.unsupported = {
-      code: 'sealed-class',
-      message: `${qualifiedName} is a sealed class; polymorphic JSON is not supported yet.`,
-    };
-    ctx.issues.push({ severity: 'warning', ...decl.unsupported, file: ctx.file, line: decl.line, type: qualifiedName });
-  }
-
-  for (const spec of childrenOfType(node, 'delegation_specifier')) {
-    if (firstChildOfType(spec, 'constructor_invocation')) {
-      const parent = firstChildOfType(firstChildOfType(spec, 'constructor_invocation') as Node, 'user_type')?.text ?? 'a superclass';
-      ctx.issues.push({
-        severity: 'warning',
-        code: 'inheritance',
-        message: `${qualifiedName} extends ${parent}; inherited fields are not included.`,
-        file: ctx.file,
-        line: decl.line,
-        type: qualifiedName,
-      });
+  decl.sealed = classModifiers.includes('sealed');
+  decl.object = node.type === 'object_declaration';
+  decl.serialName = classAnnotations.jsonName;
+  decl.packageName = ctx.packageName;
+  decl.polymorphismFramework = ctx.framework;
+  for (const annotation of readAnnotations(modifiers)) {
+    const reader = new ArgReader(annotation);
+    if (annotation.name === 'JsonClassDiscriminator') decl.discriminator = reader.string('discriminator');
+    if (annotation.name === 'JsonClass') {
+      const generator = reader.string('generator');
+      if (generator?.startsWith('sealed:')) decl.discriminator = generator.slice('sealed:'.length);
     }
   }
+  decl.parentNames = childrenOfType(node, 'delegation_specifier').map((spec) => {
+    const invocation = firstChildOfType(spec, 'constructor_invocation');
+    return firstChildOfType(invocation ?? spec, 'user_type')?.text ?? '';
+  }).filter(Boolean);
 
   if (enumBody) {
     decl.enumCases = extractEnumCases(enumBody, ctx);

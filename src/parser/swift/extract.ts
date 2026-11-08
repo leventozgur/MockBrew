@@ -144,6 +144,9 @@ function fillEnum(decl: TypeDecl, node: Node, body: Node, ctx: Ctx): void {
   const inherited = inheritedTypes(node);
   const rawType = inherited.find((t) => ['String', 'Int', 'Int8', 'Int16', 'Int32', 'Int64', 'UInt', 'UInt8', 'UInt16', 'UInt32', 'UInt64'].includes(t));
   const entries = readEnumEntries(body);
+  for (const member of childrenOfType(body, 'init_declaration')) {
+    if (isDecoderInit(member)) ctx.issues.push({ severity: 'warning', code: 'custom-decoder', message: `${decl.qualifiedName} implements init(from:); its hand-written JSON shape is not supported.`, file: ctx.file, line: lineOf(member), type: decl.qualifiedName });
+  }
 
   if (entries.some((e) => e.associated)) {
     markUnsupported(decl, ctx, 'enum-associated-values', `${decl.qualifiedName} is an enum with associated values; its Codable format is not supported.`);
@@ -226,18 +229,10 @@ function fillClass(decl: TypeDecl, node: Node, body: Node, ctx: Ctx): void {
       });
     }
   }
-  // By convention a superclass comes first; protocols are indistinguishable without type info.
+  // A superclass is conventionally the first inherited type; resolve it against source declarations later.
   const base = declarationKind(node) === 'class' ? inheritedTypes(node)[0] : undefined;
-  if (base && !KNOWN_PROTOCOLS.has(base)) {
-    ctx.issues.push({
-      severity: 'info',
-      code: 'inheritance',
-      message: `${decl.qualifiedName} may extend ${base}; inherited fields are not included.`,
-      file: ctx.file,
-      line: decl.line,
-      type: decl.qualifiedName,
-    });
-  }
+  if (base && !KNOWN_PROTOCOLS.has(base)) decl.parentNames = [base];
+
 }
 
 function isDecoderInit(init: Node): boolean {
