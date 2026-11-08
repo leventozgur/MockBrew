@@ -1,9 +1,11 @@
 import { promises as fs } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { buildOpenApi } from '../../core/openapi.js';
+import { exportBundle } from '../../core/import/bundle.js';
+import { exportPostman } from '../../core/import/postman-export.js';
 import { type Io, UsageError, openProject } from '../common.js';
 
-export const exportHelp = `mockbrew export openapi [--project <path>]
+export const exportHelp = `mockbrew export bundle|postman|openapi [--project <path>]
 
 Writes an OpenAPI 3.1 document built from the endpoints, scenarios and linked models of a project. Treat it
 as a contract proposal for the backend team.
@@ -25,12 +27,17 @@ export async function exportCommand(argv: string[], io: Io): Promise<void> {
       title: { type: 'string' },
       'api-version': { type: 'string' },
       'include-inactive': { type: 'boolean' },
+      collection: { type: 'string', multiple: true },
     },
   });
-  if (positionals[0] !== 'openapi' || positionals.length !== 1) throw new UsageError('Usage: mockbrew export openapi [options].');
+  if (!['bundle', 'postman', 'openapi'].includes(positionals[0] ?? '') || positionals.length !== 1) throw new UsageError('Usage: mockbrew export bundle|postman|openapi [options].');
   const service = await openProject(values.project);
   try {
-    const document = buildOpenApi(service.model(), {
+    const project = service.model();
+    const bundle = positionals[0] === 'openapi' ? undefined : exportBundle(project, values.collection);
+    const selectedProject = values.collection ? { ...project, collections: project.collections.filter((c) => values.collection?.includes(c.name) || values.collection?.includes(c.id)) } : project;
+    if (values.collection && selectedProject.collections.length !== values.collection.length) throw new UsageError('Selected collection was not found or repeated.');
+    const document = positionals[0] === 'bundle' ? bundle : positionals[0] === 'postman' ? exportPostman(bundle!, project.name, service.view().runtime.url ?? `http://localhost:${project.settings.port}`) : buildOpenApi(selectedProject, {
       title: values.title,
       version: values['api-version'],
       onlyActive: !values['include-inactive'],

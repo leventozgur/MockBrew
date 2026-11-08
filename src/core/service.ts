@@ -40,6 +40,7 @@ import { diffSchemas } from './schema-diff.js';
 import { updateModelBody } from './model-update.js';
 import type { ModelCheck, ModelUpdatePreview, ModelUpdateSelection, ProjectView, RuntimeStatus } from './view.js';
 import { normalizeSettings } from '../schema/types.js';
+import { exportBundle, parseBundle } from './import/bundle.js';
 
 export interface UpsertInput {
   collection: string;
@@ -138,6 +139,49 @@ export class ProjectService extends EventEmitter {
 
   model(): ProjectModel {
     return this.document.snapshot();
+  }
+
+  exportBundle(collections?: string[]) { return exportBundle(this.model(), collections); }
+
+  previewBundle(content: string) {
+    const bundle = parseBundle(content);
+    const project = this.model();
+    const conflicts = bundle.collections.flatMap((collection) => collection.endpoints.flatMap((endpoint) =>
+      project.collections.flatMap((existing) => existing.endpoints.filter((e) =>
+        e.method === endpoint.method && pathShape(e.path) === pathShape(endpoint.path) &&
+        (existing.active || existing.name.toLowerCase() === collection.name.toLowerCase()),
+      ).map((e) => ({ collection: collection.name, method: endpoint.method, path: endpoint.path, existingCollection: existing.name, endpointId: e.id }))),
+    ));
+    const hash = createHash('sha256').update(JSON.stringify({ bundle, revision: this.revision })).digest('hex');
+    return { hash, bundle, conflicts, newCollections: bundle.collections.filter((c) => !project.collections.some((e) => e.name.toLowerCase() === c.name.toLowerCase())).map((c) => c.name) };
+  }
+
+  applyBundle(content: string, previewHash: string, strategy: 'skip' | 'rename' | 'replace'): Promise<void> {
+    if (!['skip', 'rename', 'replace'].includes(strategy)) throw invalid('Invalid conflict strategy.');
+    return this.mutate((doc) => {
+      const preview = this.previewBundle(content);
+      if (preview.hash !== previewHash) throw new StudioError('STALE', 'Import preview is stale. Preview again.');
+      for (const incoming of preview.bundle.collections) {
+        let existing = doc.snapshot().collections.find((c) => c.name.toLowerCase() === incoming.name.toLowerCase());
+        const conflicts = preview.conflicts.filter((c) => c.collection === incoming.name);
+        let name = incoming.name;
+        if (strategy === 'rename' && (existing || conflicts.length)) {
+          let n = 2;
+          while (doc.snapshot().collections.some((c) => c.name.toLowerCase() === name.toLowerCase())) name = `${incoming.name.slice(0, 90)} (${n++})`;
+          existing = undefined;
+        }
+        const collectionId = existing?.id ?? doc.addCollection(name);
+        if (strategy === 'rename' && conflicts.length) doc.setCollectionActive(collectionId, false);
+        for (const endpoint of incoming.endpoints) {
+          const collisions = doc.snapshot().collections.flatMap((c) => c.endpoints.filter((e) =>
+            e.method === endpoint.method && pathShape(e.path) === pathShape(endpoint.path) && (c.active || c.id === collectionId)));
+          if (collisions.length && strategy === 'skip') continue;
+          if (collisions.length && strategy === 'replace') for (const collision of collisions) doc.removeEndpoint(collision.id);
+          const id = doc.addBundleEndpoint(collectionId, endpoint);
+          if (endpoint.model) doc.setModel(id, sanitizeModelLink(endpoint.model, this.root, this.location.dir));
+        }
+      }
+    });
   }
 
   /** Parts of the view that only depend on the files; recomputed once per revision. */

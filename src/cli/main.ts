@@ -9,6 +9,7 @@ import { checkCommand, checkHelp } from './commands/check.js';
 import { exportCommand, exportHelp } from './commands/export.js';
 import { generateCommand, generateHelp } from './commands/generate.js';
 import { initCommand, initHelp } from './commands/init.js';
+import { importCommand, importHelp } from './commands/import.js';
 import { mcpCommand, mcpHelp } from './commands/mcp.js';
 import { profilesCommand, profilesHelp } from './commands/profiles.js';
 import { serveCommand, serveHelp } from './commands/serve.js';
@@ -29,7 +30,8 @@ Commands:
   profiles   List test profiles (profiles list)
   generate   Create a JSON body from Kotlin/Swift models
   check      Compare linked models and saved bodies with the current source code
-  export     Write an OpenAPI document (export openapi)
+  import     Import a MockBrew bundle
+  export     Write a bundle, Postman collection or OpenAPI document
   snippets   Debug network setup for emulators, simulators and devices
   mcp        Start the MCP server (stdio) for Kiro / Copilot
 
@@ -44,6 +46,7 @@ const helps: Record<string, string> = {
   generate: generateHelp,
   check: checkHelp,
   export: exportHelp,
+  import: importHelp,
   snippets: snippetsHelp,
   mcp: mcpHelp,
 };
@@ -89,6 +92,8 @@ async function run(argv: string[]): Promise<void> {
       return checkCommand(rest, consoleIo);
     case 'export':
       return exportCommand(rest, consoleIo);
+    case 'import':
+      return importCommand(rest, consoleIo);
     case 'snippets':
       return snippetsCommand(rest, consoleIo);
     case 'mcp':

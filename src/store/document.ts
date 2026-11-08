@@ -52,6 +52,7 @@ import {
   withDefaultContentType,
 } from '../core/validation.js';
 import { normalizeSettings } from '../schema/types.js';
+import type { Bundle } from '../core/import/bundle.js';
 import { type StudioFile, newStudioFile, parseStudioFile } from './studio-file.js';
 
 const CORS_METHODS = 'GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS';
@@ -349,6 +350,20 @@ export class ProjectDocument {
     this.assertUniqueScenarioNames(route.responses);
     this.environment = addRouteMutator(this.environment, route, parentId);
     return route.uuid;
+  }
+
+  /** Import a previously validated endpoint, preserving rule data and regenerating IDs. */
+  addBundleEndpoint(collectionId: string, input: Bundle['collections'][number]['endpoints'][number]): string {
+    const id = this.addEndpoint(collectionId, input);
+    const route = this.requireRoute(id);
+    const responses = route.responses.map((response, index) => {
+      const source = input.scenarios[index]!;
+      return { ...response, headers: source.headers, body: source.body, default: source.default,
+        rules: structuredClone(source.rules) as RouteResponse['rules'], rulesOperator: source.rulesOperator };
+    });
+    this.replaceRoute({ ...route, responses });
+    this.setEndpointMode(id, input.responseMode);
+    return id;
   }
 
   updateEndpoint(endpointId: string, patch: EndpointPatch): void {
