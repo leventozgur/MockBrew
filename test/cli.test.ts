@@ -178,3 +178,51 @@ describe('cli', () => {
     expect(output()).toContain('Mock server running at http://localhost:');
   });
 });
+
+describe('mcp install', () => {
+  it('prints exact client commands and the generic Kiro snippet', () => {
+    const project = path.join(dir, 'project space');
+    const root = path.join(dir, 'root');
+    const server = [process.execPath, cli, 'mcp', '-p', project, '--root', root];
+    const prefixes: Record<string, string[]> = {
+      claude: ['claude', 'mcp', 'add', '--scope', 'user', 'mockbrew', '--'],
+      codex: ['codex', 'mcp', 'add', 'mockbrew', '--'],
+      gemini: ['gemini', 'mcp', 'add', '-s', 'user', 'mockbrew'],
+      copilot: ['copilot', 'mcp', 'add', 'mockbrew', '--'],
+    };
+    for (const [client, prefix] of Object.entries(prefixes)) {
+      const result = run(['mcp', 'install', client, '-p', project, '--root', root, '--scope', 'user', '--print']);
+      expect(result.code).toBe(0);
+      expect(result.out.trim()).toBe([...prefix, ...server].map((s) => JSON.stringify(s)).join(' '));
+    }
+    const kiro = run(['mcp', 'install', 'kiro', '-p', project, '--root', root, '--print']);
+    expect(kiro.out).toContain('generic mcpServers');
+    expect(JSON.parse(kiro.out.slice(kiro.out.indexOf('{'))).mcpServers.mockbrew).toEqual({ command: process.execPath, args: server.slice(1) });
+  });
+
+  it('refuses without confirmation on non-TTY and reports missing clients', () => {
+    const refused = run(['mcp', 'install', 'claude', '-p', dir]);
+    expect(refused.code).toBe(2);
+    expect(refused.out).toContain('"claude" "mcp" "add"');
+    expect(refused.err).toContain('interactive TTY');
+    const missing = spawnSync(process.execPath, [cli, 'mcp', 'install', 'claude', '-p', dir, '--yes'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: dir } });
+    expect(missing.status).toBe(1);
+    expect(missing.stderr).toContain('CLI not found on PATH');
+    expect(missing.stderr).toContain('mcpServers');
+  });
+
+  it('executes fake clients with literal argv and no shell', async () => {
+    const bin = path.join(dir, 'bin');
+    await fs.mkdir(bin);
+    const log = path.join(dir, 'args.json');
+    const malicious = path.join(dir, 'project;touch PWNED');
+    for (const name of ['claude', 'codex', 'gemini', 'copilot']) {
+      await fs.writeFile(path.join(bin, name), `#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.ARGS_LOG, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+      const result = spawnSync(process.execPath, [cli, 'mcp', 'install', name, '-p', malicious, '--root', dir, '--yes'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: bin, ARGS_LOG: log } });
+      expect(result.status, result.stderr).toBe(0);
+      const prefix = name === 'gemini' ? ['mcp', 'add', 'mockbrew'] : ['mcp', 'add', 'mockbrew', '--'];
+      expect(JSON.parse(await fs.readFile(log, 'utf8'))).toEqual([...prefix, process.execPath, cli, 'mcp', '-p', malicious, '--root', dir]);
+    }
+    await expect(fs.stat(path.join(dir, 'PWNED'))).rejects.toThrow();
+  });
+});

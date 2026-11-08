@@ -51,6 +51,17 @@ describe('MCP server', () => {
     expect(save?.annotations?.destructiveHint).toBe(false);
   });
 
+  it('lists and reads the guide and prompts over stdio', async () => {
+    expect((await client.listResources()).resources.map((r) => r.uri)).toContain('mockbrew://guide');
+    const guide = await client.readResource({ uri: 'mockbrew://guide' });
+    expect(guide.contents[0]).toMatchObject({ mimeType: 'text/markdown', text: expect.stringContaining('preview_model_update') });
+    expect((await client.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(['add_error_scenarios', 'mock_endpoint_from_model']);
+    const endpoint = await client.getPrompt({ name: 'mock_endpoint_from_model', arguments: { modelType: 'User', method: 'GET', path: '/users' } });
+    expect(endpoint.messages[0]?.content).toMatchObject({ text: expect.stringContaining('save_scenario') });
+    const errors = await client.getPrompt({ name: 'add_error_scenarios', arguments: { endpointId: 'endpoint-1' } });
+    expect(errors.messages[0]?.content).toMatchObject({ text: expect.stringContaining('endpoint-1') });
+  });
+
   it('manages profiles and previews deletion', async () => {
     const saved = (await call('save_scenario', { collection: 'Auth', method: 'GET', path: '/auth', scenarioName: 'Expired', statusCode: 401, body: '{}' })).json();
     const id = (await call('save_profile', { name: 'Expired', endpoints: { [saved.endpointId]: { scenarioId: saved.scenarioId } } })).json().id;
