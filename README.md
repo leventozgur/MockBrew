@@ -1,110 +1,114 @@
 # Mock API Studio
 
-Android, iOS ve Kotlin Multiplatform gelistirmelerinde backend hazir olmadan endpoint'leri yerelde taklit etmek icin offline-first, ucretsiz bir arac.
+An offline-first, free tool for mocking local endpoints during Android, iOS, and Kotlin Multiplatform development, before a backend is ready.
 
-Arac, Mockoon'un MIT lisansli mock motorunu kutuphane olarak kullanan **bagimsiz bir npm paketidir**. Mockoon'un fork'u veya eklentisi degildir. Mock calistirma ozelliklerini Mockoon motorundan alir; ustune Kotlin/Swift modelinden response uretimi, collection yonetimi, yerel web UI ve Kiro/Copilot icin MCP entegrasyonu ekler.
+The tool is an **independent npm package** that uses the MIT-licensed mock engine from Mockoon as a library. It is not a fork or plugin. The engine provides mock runtime features; Mock API Studio adds response generation from Kotlin/Swift models, collection management, a local web UI, and MCP integration for Kiro/Copilot.
 
-## Urun hedefi
+## Product goals
 
-- Kotlin (Gson, Kotlinx Serialization, Moshi) ve Swift (Codable) modellerinden ortak JSON Schema cikarmak ve semaya uygun, anlamli ornek JSON uretmek.
-- Endpoint method, path, status, header ve body'yi duzenlemek; bir endpoint icin birden fazla response senaryosu (success, bos liste, 401, 500) tutmak.
-- Endpoint'leri collection'larda gruplamak ve birden fazla collection'i ayni port uzerinde birlikte calistirmak.
-- Localhost uzerinde CORS sorunu olmadan Android Emulator, iOS Simulator, WebView ve browser istemcilerine hizmet vermek.
-- Mock tanimlarini git'e konabilen JSON dosyalarinda ekip ile paylasmak.
-- Istege bagli olarak Kiro/Copilot gibi AI araclariyla is anlamina uygun veri uretmek; AI olmadan da tum temel islevleri calistirmak.
+- Derive a shared JSON Schema from Kotlin (Gson, Kotlinx Serialization, Moshi) and Swift (Codable) models and generate meaningful example JSON that conforms to it.
+- Edit endpoint methods, paths, statuses, headers, and bodies; keep multiple response scenarios per endpoint (success, empty list, 401, 500).
+- Group endpoints into collections and run multiple collections together on one port.
+- Serve Android Emulator, iOS Simulator, WebView, and browser clients on localhost without CORS issues.
+- Share mock definitions with a team as Git-friendly JSON files.
+- Optionally generate domain-appropriate data with AI tools such as Kiro/Copilot; all core features also work without AI.
 
-## Temel kararlar
+## Key decisions
 
-- **Dagitim:** Tek npm paketi (CLI + yerel web UI + MCP server). Paket adi `@mock-api-studio/studio`, komut `mock-studio`. `mock-api-studio` adi npm'de alinmis oldugu icin scoped ad kullanilir; `@mock-api-studio` kapsaminin sahipligi yayin oncesi dogrulanmalidir.
-- **Mock motoru:** `@mockoon/commons` ve `@mockoon/commons-server` 9.10.0 (MIT), exact version ile sabitlenir.
-- **Veri formati:** `<ad>.environment.json` (Mockoon environment) + `<ad>.studio.json` (araca ozel yan dosya, `schemaVersion: 1`). Ayni environment dosyasi Mockoon CLI ile de calisir.
-- **Fork yok:** Electron/Angular bakim yuku, kod imzalama maliyeti ve upstream merge sorunlari nedeniyle reddedildi. Ayrintisi: [Mimari](docs/ARCHITECTURE.md#karar-kaydi).
-- **Model parser:** Kotlin ve Swift kaynagi derlenmeden, tree-sitter (WASM) AST'i uzerinden parse edilir; ayri bir child process'te calisir.
-- **AI:** Once MCP server (AI araci bizim tool'larimizi cagirir), sonra istege bagli UI icinden AI CLI cagrisi (GitHub Copilot CLI). AI hicbir temel akisi zorunlu kilmaz ve varsayilan kapalidir.
-- **Runtime:** Kurulu Node.js >= 22.12 (LTS 22 ve 24 test edildi). Arac kendi Node kurulumunu yapmaz.
-- **Guvenli mod:** Paylasilan Mockoon dosyalarindaki templating, data bucket, callback ve CRUD/WebSocket route'lari varsayilan olarak calistirilmaz.
-- **Marka:** "Mockoon" adi ve logosu urun adinda veya arayuzde kullanilmaz; bagimlilik ve lisans olarak belirtilir ([NOTICE.md](NOTICE.md)).
+- **Distribution:** One npm package (CLI + local web UI + MCP server). Package: `@mock-api-studio/studio`; command: `mock-studio`. The unscoped `mock-api-studio` name is taken on npm, so a scoped name is used; ownership of `@mock-api-studio` must be verified before publishing.
+- **Mock engine:** `@mockoon/commons` and `@mockoon/commons-server` 9.10.0 (MIT), pinned to exact versions.
+- **Data format:** `<name>.environment.json` (Mockoon environment) + `<name>.studio.json` (tool-specific sidecar, `schemaVersion: 1`). The environment file also works with Mockoon CLI.
+- **No fork:** Rejected due to Electron/Angular maintenance, code-signing cost, and upstream merge burden. Details: [Architecture](docs/ARCHITECTURE.md#decision-log).
+- **Model parser:** Parse Kotlin and Swift source without compiling it, using a tree-sitter (WASM) AST in a separate child process.
+- **AI:** First an MCP server (the AI tool calls our tools), then an optional AI CLI call from the UI (GitHub Copilot CLI). No core workflow requires AI; it is disabled by default.
+- **Runtime:** Installed Node.js >= 22.12 (LTS 22 and 24 tested). The tool does not install Node itself.
+- **Safe mode:** Templating, data buckets, callbacks, and CRUD/WebSocket routes in shared Mockoon files are not executed by default.
+- **Brand:** The Mockoon name and logo are not used in the product name or UI; the dependency and license are identified in [NOTICE.md](NOTICE.md).
 
-## Kurulum
+## Installation
 
-Gereksinim: Node.js >= 22.12 (`node -v`). Android/iOS projesinde baska bir sey gerekmez; arac Kotlin ve Swift kodunu derlemeden okur.
+Requirement: Node.js >= 22.12 (`node -v`). No additional Android/iOS project setup is needed; the tool reads Kotlin and Swift without compiling them.
 
-Paket henuz npm'de yayinlanmadigi icin su an iki yol var (ikisi de denendi); sonunda `mock-studio` komutu elinizin altinda olur. Ikisi de `sudo` gerektirmez.
+The package is not yet published to npm, so there are two tested installation options. Both make `mock-studio` available and require no `sudo`.
 
-**1. Takim reposundan, ayri bir arac klasorune (onerilen)**
+**1. From the team repository, in a separate tools directory (recommended)**
 
 ```sh
 mkdir -p ~/tools/mock-studio && cd ~/tools/mock-studio
 npm init -y
-npm install git+ssh://git@<sunucu>/<org>/<repo>.git     # kurulurken `prepare` scripti araci derler (birkac dakika)
+npm install git+ssh://git@<host>/<org>/<repo>.git     # the prepare script builds the tool (a few minutes)
 
-# ~/.zshrc icine ekleyin:
+# Add to ~/.zshrc:
 export PATH="$HOME/tools/mock-studio/node_modules/.bin:$PATH"
 ```
 
-Guncellemek icin ayni klasorde `npm install git+ssh://...` komutunu tekrar calistirin (belirli bir surume sabitlemek icin adresin sonuna `#<tag>` ekleyin).
+To update, repeat `npm install git+ssh://...` in the same directory (append `#<tag>` to pin a specific version).
 
-**2. Klonlayip derleme**
+**2. Clone and build**
 
 ```sh
 git clone <repo-url> ~/tools/mock-api-studio && cd ~/tools/mock-api-studio
-npm ci        # bagimliliklari kurar ve derler
+npm ci        # installs dependencies and builds
 
-# ~/.zshrc icine ekleyin:
+# Add to ~/.zshrc:
 alias mock-studio='node ~/tools/mock-api-studio/dist/cli/main.js'
 ```
 
-Guncellemek icin `git pull && npm ci`. (`npm link` de kullanilabilir; npm'in global klasoru yazilabilir olmalidir.)
+To update, run `git pull && npm ci`. (`npm link` is also an option; npm's global directory must be writable.)
 
-**Zaten Node kullanan bir proje** (React Native, KMP web gibi) araci `npm install -D git+ssh://...` ile bagimlilik olarak ekleyip `npx mock-studio <komut>` diyebilir.
+A project that already uses Node (for example, React Native or KMP web) can add the tool as a dependency with `npm install -D git+ssh://...` and run `npx mock-studio <command>`.
 
-**npm'e yayinlandiktan sonra** kurulum gerekmez: `npx @mock-api-studio/studio <komut>` (ya da `npm install -g @mock-api-studio/studio`).
+**After npm publication**, use `npx @mock-api-studio/studio <command>` or `npm install -g @mock-api-studio/studio`.
 
-Kontrol: `mock-studio --version`
+Check the installation with `mock-studio --version`.
 
-## Kullanim
+## Usage
 
-Mock dosyalari mobil uygulama reposunda (ornegin `mocks/`) tutulur ve git ile paylasilir.
+Keep mock files in the mobile application repository (for example, `mocks/`) and share them through Git.
 
-**Ilk kez, bir kisi:**
+**First-time setup (one team member):**
 
 ```sh
-cd <uygulama-reposu>
+cd <application-repository>
 mock-studio init mocks --name "Shop API"     # mocks/shop-api.environment.json + shop-api.studio.json
-mock-studio ui -p mocks --root . --open        # yerel web UI (--root: model dosyalarinin okunabilecegi klasor)
+mock-studio ui -p mocks --root . --open        # local web UI (--root: directory from which model files may be read)
 git add mocks && git commit -m "Add mocks"
 ```
 
-**Ekipten herkes (git pull sonrasi):**
+**Everyone else (after `git pull`):**
 
 ```sh
-mock-studio serve -p mocks                     # aktif collection'lari http://127.0.0.1:3000 uzerinde calistirir
-mock-studio ui -p mocks --root . --open        # ya da UI ile duzenleyip calistirin
+mock-studio serve -p mocks                     # runs active collections at http://127.0.0.1:3000
+mock-studio ui -p mocks --root . --open        # or edit and run them in the UI
 ```
 
-Uygulamanin debug build'ini mock'a yonlendirin: Android Emulator `http://10.0.2.2:3000/`, iOS Simulator `http://localhost:3000/`. Debug `network_security_config` / ATS ayarlari ve fiziksel cihaz adimlari icin `mock-studio snippets`.
+Point the application's debug build at the mock: Android Emulator `http://10.0.2.2:3000/`, iOS Simulator `http://localhost:3000/`. For debug `network_security_config` / ATS settings and physical-device steps, run `mock-studio snippets`.
 
-Diger komutlar:
+Other commands:
 
 ```sh
 mock-studio generate -m app/model -t "BaseResponse<User>" \
-  -p mocks --collection Users --method GET --path /users/:id   # modelden senaryo kaydet
-mock-studio check -p mocks --root .                            # model degisti mi? (CI icin; degisiklik varsa 1 ile cikar)
+  -p mocks --collection Users --method GET --path /users/:id   # save a scenario from a model
+mock-studio check -p mocks --root .                            # check for model changes (exit 1 if changed; for CI)
 mock-studio export openapi -p mocks -o openapi.json
-mock-studio mcp -p mocks --root .                              # Kiro / Copilot icin MCP
+mock-studio mcp -p mocks --root .                              # MCP for Kiro / Copilot
 ```
 
-Komutlarin tam listesi icin `mock-studio --help`; MCP kurulumu ve gelistirme icin [Gelistirme rehberi](docs/DEVELOPMENT.md).
+Run `mock-studio --help` for the full command list. For MCP setup and development, see the [Development Guide](docs/DEVELOPMENT.md).
 
-## Dokumanlar
+## About `npm audit` warnings
 
-- [Urun gereksinimleri](docs/PRODUCT_REQUIREMENTS.md)
+Advisories for `@faker-js/faker` (code execution) and `joi` (denial of service) come through the mock engine packages. Safe mode, which is enabled by default, disables the risky engine features such as templating. **Do not run `npm audit fix`**: it downgrades the engine.
+
+## Documentation
+
+- [Product Requirements](docs/PRODUCT_REQUIREMENTS.md)
 - [Roadmap](docs/ROADMAP.md)
-- [Mimari ve guvenlik](docs/ARCHITECTURE.md)
-- [Gelistirme rehberi](docs/DEVELOPMENT.md)
-- [Devir raporu (Claude Code icin)](docs/HANDOFF.md)
-- [Ucuncu parti bildirimleri](NOTICE.md)
+- [Architecture and Security](docs/ARCHITECTURE.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [Handoff](docs/HANDOFF.md)
+- [Third-party notices](NOTICE.md)
 
-## Durum
+## Status
 
-Roadmap'teki M0-M5 asamalari uygulanmistir; her asamanin kanitlari [Roadmap](docs/ROADMAP.md) dosyasindadir. Dogrulanmayan noktalar (Mockoon desktop, fiziksel cihazlar, Windows/Linux, gercek ekip kod tabani taramasi, Kiro/Copilot chat) orada ve [Gelistirme rehberi](docs/DEVELOPMENT.md#manuel-dogrulama-matrisi) icinde acikca listelenmistir.
+Milestones M0-M5 in the roadmap are implemented; evidence for each milestone is in the [Roadmap](docs/ROADMAP.md). Unverified items (Mockoon desktop, physical devices, Windows/Linux, scanning real team codebases, and Kiro/Copilot chat) are explicitly listed there and in the [Development Guide manual verification matrix](docs/DEVELOPMENT.md#manual-verification-matrix).

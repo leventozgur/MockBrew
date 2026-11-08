@@ -1,245 +1,245 @@
-# Devir Raporu (Claude Code icin)
+# Handoff Report (for Claude Code)
 
-Bu belge, projeye Claude Code ile devam edecek kisinin (veya ajanin) ilk okuyacagi ozet ve baslangic noktasidir. Bir **anlik goruntudur**; otorite degildir. Ayrinti icin [Urun gereksinimleri](PRODUCT_REQUIREMENTS.md), [Roadmap](ROADMAP.md), [Mimari](ARCHITECTURE.md) ve [Gelistirme rehberi](DEVELOPMENT.md) dosyalari esas alinmalidir; bu belge onlarla celisirse onlar (ve kod) gecerlidir.
+This document is the summary and starting point that the person (or agent) continuing the project with Claude Code should read first. It is a **snapshot**, not an authority. For details, refer to [Product requirements](PRODUCT_REQUIREMENTS.md), [Roadmap](ROADMAP.md), [Architecture](ARCHITECTURE.md), and the [Development guide](DEVELOPMENT.md); if this document conflicts with them, those documents (and the code) take precedence.
 
-- **Rapor tarihi:** 2026-11-08
-- **Rapor sirasinda yeni kod gelistirilmedi.** Yalnizca durum olculdu (lint, build, test) ve bu belge yazildi.
-- **Dogrulama etiketleri:** "Bugun calistirildi" = bu raporu yazarken komut olarak calistirildi. "Kayit" = ROADMAP/DEVELOPMENT kaydina dayanir, bu oturumda tekrar edilmedi.
+- **Report date:** 2026-11-08
+- **No new code was developed while preparing this report.** Only the status was measured (lint, build, test), and this document was written.
+- **Verification labels:** "Run today" means run as a command while preparing this report. "Recorded" means based on a ROADMAP/DEVELOPMENT record and not rerun in this session.
 
-## 1. Proje nedir
+## 1. What is the project
 
-**Mock API Studio**, Android, iOS ve Kotlin Multiplatform ekiplerinin backend hazir olmadan, yerelde (localhost) calisan, offline-first, ucretsiz bir mock API araci.
+**Mock API Studio** is a free, offline-first mock API tool for Android, iOS, and Kotlin Multiplatform teams. It runs locally (localhost) before the backend is ready.
 
-- Kotlin (Gson, Kotlinx Serialization, Moshi) ve Swift (`Codable`) modellerini **derlemeden** okuyup JSON Schema cikarir ve semaya uygun, alan adina gore anlamli, deterministik ornek JSON uretir.
-- Endpoint'leri collection'larda gruplar; endpoint basina birden fazla response senaryosu (success, bos liste, 401, 500...) tutar; aktif collection'lari tek port uzerinde birlikte calistirir.
-- CORS sorunu olmadan Android Emulator, iOS Simulator, WebView ve browser istemcilerine hizmet verir.
-- Mock tanimlari git'e konabilen dosyalardir; ekip git ile paylasir.
-- AI istege baglidir ve varsayilan kapalidir. AI olmadan tum temel islevler calisir.
+- Reads Kotlin (Gson, Kotlinx Serialization, Moshi) and Swift (`Codable`) models **without compiling them**, derives JSON Schema, and generates deterministic sample JSON that conforms to the schema and is meaningful for each field name.
+- Groups endpoints into collections; stores multiple response scenarios per endpoint (success, empty list, 401, 500...); runs active collections together on one port.
+- Serves Android Emulator, iOS Simulator, WebView, and browser clients without CORS issues.
+- Mock definitions are files that can be committed to git; teams share them through git.
+- AI is optional and disabled by default. All core functionality works without AI.
 
-**Dagitim:** Tek npm paketi `@mock-api-studio/studio`, komut `mock-studio` (CLI + yerel web UI + MCP server). Henuz npm'de yayinlanmadi.
+**Distribution:** A single npm package, `@mock-api-studio/studio`, with the `mock-studio` command (CLI + local web UI + MCP server). Not yet published to npm.
 
-**Is dizini:** depo koku (klasor adi `mobile-mock-api-studio`; urun adindan "mobile" kaldirildi).
+**Working directory:** repository root (folder name `mobile-mock-api-studio`; "mobile" was dropped from the product name).
 
-## 2. Gecmis ve zaman cizelgesi
+## 2. History and timeline
 
-| Tarih | Olay |
+| Date | Event |
 |---|---|
-| 2026-11-03 | Ihtiyac tanimlandi. Ucretli oldugu icin Mockoon reddedildi (kullanici). Kapsam, roadmap ve AI/Node/serialization karar noktalari konusuldu. Kotlin serialization bicimleri iki ozel uygulama reposundan dogrulandi. Planlama dokumanlari yazildi (o zaman uygulama yoktu ve plan Fastify ile sifirdan mock server idi). |
-| 2026-11-04 | M0-M5 uygulandi. Mock motoru olarak Mockoon'un MIT lisansli paketleri kutuphane olarak secildi (bkz. [Bolum 4](#4-alinan-kararlar), karar 1). Urun adi "Mock API Studio" oldu. Kurulum ve kullanim README'ye eklendi. |
-| 2026-11-08 | Bu devir raporu hazirlandi; durum yeniden olculdu. |
+| 2026-11-03 | The need was defined. Mockoon was rejected because it is paid (user). Scope, roadmap, and AI/Node/serialization decision points were discussed. Kotlin serialization formats were verified against two private implementation repositories. Planning documents were written (there was no implementation at the time, and the plan was to build a mock server from scratch with Fastify). |
+| 2026-11-04 | M0-M5 were implemented. Mockoon's MIT-licensed packages were chosen as the mock engine library (see [4. Decisions made](#4-decisions-made), decision 1). The product was named "Mock API Studio." Installation and usage were added to the README. |
+| 2026-11-08 | This handoff report was prepared; status was measured again. |
 
-## 3. Kullanici istekleri ve karsiligi
+## 3. User requests and how they were addressed
 
-Kullanicinin kendi sozleriyle ifade ettigi istekler ve su anki durumu. "Sapma" olanlar kullanici teyidi gerektirir ([Bolum 8](#8-kullanicidan-karar-bekleyen-konular)).
+Requests expressed in the user's own words and their current status. Items marked "Deviation" require user confirmation ([8. Decisions pending from the user](#8-decisions-pending-from-the-user)).
 
-| Istek (kaynak: 2026-11-03 mesajlari) | Durum | Not |
+| Request (source: 2026-11-03 messages) | Status | Notes |
 |---|---|---|
-| Kotlin/Swift modellerine uygun JSON donen localhost servisi | Karsilandi | Parser + yerel uretici. Gson, Kotlinx, Moshi, Swift Codable. Gercek ekip modelleriyle taranmadi. |
-| CORS hatasi olmamasi | Karsilandi (HTTP seviyesinde) | `wildcard` ve `reflect` (credentials) modlari. Gercek WebView'de denenmedi. |
-| Response'u duzenleyebilmek, endpoint'i belirleyebilmek | Karsilandi | Web UI + CLI. |
-| Endpoint ve response'larla collection olusturmak, ayni anda birden fazla endpoint | Karsilandi | Collection = Mockoon kok folder; aktif collection'lar tek portta. |
-| Postman gibi JSON export/import ile ortak kullanim | **Kismen / sapma** | Collection icin UI/API'de import-export yok. Paylasim, proje dosyalarinin (`*.environment.json` + `*.studio.json`) git ile veya kopyalayarak paylasilmasidir. `export openapi` var ama tek yonlu ve bir sozlesme onerisidir. Bkz. karar sorusu 3. |
-| Senkron/online yapi gerekmez, tamamen offline olabilir | Karsilandi | Telemetri yok, bulut yok. |
-| Mockoon ucretli, uygun degil | **Sapma (teyit gerekli)** | Urun, Mockoon'un MIT lisansli motor paketlerini bagimlilik olarak kullaniyor. Bkz. karar 1 ve karar sorusu 1. |
-| Copilot CLI, Kiro CLI vb. ile oto-generate; istege bagli prompt alani; prompt yoksa modele uygun uretim | Kismen | UI'da opsiyonel prompt alani var (`ui --ai copilot`). Tek provider GitHub Copilot CLI. Kiro CLI provider'i yok; Kiro/Copilot **chat** icin MCP server var. AI yoksa yerel yapisal uretim devreye girer. |
-| Basta yalnizca Android, iOS, KMP | Karsilandi | |
-| Gecikme/hata senaryolari (ilk faz icin zorunlu degil) | Kismen | Response basina sabit gecikme ve status/senaryo var. Request'e gore kurallar dosyada calisir, UI'si ertelendi. |
-| Grafik arayuz; web UI olabilir; en hizli/en islevsel yol | Karsilandi | Localhost web UI (React + Vite), Fastify ile sunuluyor. Masaustu uygulama yok. |
-| Node.js kurulum asamasinda kontrol edilsin; yoksa once kurup devam eden yapi | **Sapma (teyit gerekli)** | Yalnizca surum kontrolu ve hata mesaji var; arac Node kurmuyor. PRODUCT_REQUIREMENTS bunu "MVP disi" yapmis. Bkz. karar sorusu 2. |
-| Kotlin serialization bicimi gercek uygulamalardan belirlensin | Yapildi | Android: Gson (`@SerializedName`, Retrofit). KMP: `kotlinx.serialization` (`@Serializable`, `@SerialName`, Ktor ContentNegotiation). Moshi incelenen projelerde gorulmedi; ucuz oldugu icin yine de eklendi. |
-| Proje adi "Mock API Studio" olsun; baska developer'lar nasil kurar/calistirir | Yapildi | README "Kurulum" ve "Kullanim". |
+| Localhost service returning JSON that matches Kotlin/Swift models | Met | Parser + local generator. Gson, Kotlinx, Moshi, Swift Codable. Not scanned against real team models. |
+| No CORS errors | Met (at HTTP level) | `wildcard` and `reflect` (credentials) modes. Not tested in a real WebView. |
+| Ability to edit responses and specify endpoints | Met | Web UI + CLI. |
+| Create collections with endpoints and responses; multiple endpoints at once | Met | Collection = Mockoon root folder; active collections share one port. |
+| Shared use through JSON export/import like Postman | **Partial / deviation** | No collection import/export in the UI/API. Sharing is done by sharing project files (`*.environment.json` + `*.studio.json`) through git or copying them. `export openapi` exists, but is one-way and a contract proposal. See decision question 3. |
+| No need for synchronous/online architecture; fully offline is acceptable | Met | No telemetry, no cloud. |
+| Mockoon is paid and unsuitable | **Deviation (confirmation required)** | The product uses Mockoon's MIT-licensed engine packages as dependencies. See decision 1 and decision question 1. |
+| Auto-generate with Copilot CLI, Kiro CLI, etc.; optional prompt field; generate a model-appropriate response when no prompt is given | Partial | There is an optional prompt field in the UI (`ui --ai copilot`). The only provider is GitHub Copilot CLI. There is no Kiro CLI provider; an MCP server is available for Kiro/Copilot **chat**. Local structural generation is used when AI is unavailable. |
+| Initially support only Android, iOS, and KMP | Met | |
+| Latency/error scenarios (not required for the first phase) | Partial | Fixed per-response latency and status/scenario are available. Request-based rules work in the file; their UI was deferred. |
+| Graphical interface; web UI is acceptable; choose the fastest/most functional path | Met | Localhost web UI (React + Vite), served with Fastify. No desktop app. |
+| Check for Node.js during installation; if missing, install it first and then continue | **Deviation (confirmation required)** | Only a version check and error message are provided; the tool does not install Node. PRODUCT_REQUIREMENTS marks this "out of MVP." See decision question 2. |
+| Determine Kotlin serialization formats from real applications | Done | Android: Gson (`@SerializedName`, Retrofit). KMP: `kotlinx.serialization` (`@Serializable`, `@SerialName`, Ktor ContentNegotiation). Moshi was not found in the projects examined; it was still added because it was inexpensive to support. |
+| Name the project "Mock API Studio"; explain how other developers install/run it | Done | README "Installation" and "Usage." |
 
-## 4. Alinan kararlar
+## 4. Decisions made
 
-Kaynak: ARCHITECTURE "Karar kaydi", PRODUCT_REQUIREMENTS, ROADMAP ve oturum kayitlari.
+Sources: ARCHITECTURE "Decision log," PRODUCT_REQUIREMENTS, ROADMAP, and session records.
 
-| # | Karar | Gerekce | Geri alinabilirlik |
+| # | Decision | Rationale | Reversibility |
 |---|---|---|---|
-| 1 | Mock motoru olarak `@mockoon/commons` ve `@mockoon/commons-server` **9.10.0** (MIT), exact pin; urun bagimsiz npm paketi, Mockoon fork'u veya eklentisi **degil** | Path param, senaryo, latency, proxy, CORS, log gibi ozellikler hazir; imzalama maliyeti yok; ayni dosya Mockoon CLI ile de calisir. Fork ve sifirdan Fastify reddedildi. | Zor: dosya formati ve runtime motora bagli. |
-| 2 | Veri formati: `<ad>.environment.json` (Mockoon) + `<ad>.studio.json` (yan dosya, `schemaVersion: 1`) | Git'e konabilir, Mockoon uyumlu, arac metadata'si ayri. | Orta. |
-| 3 | Collection = kok seviyedeki Mockoon folder; folder disindaki route'lar "Ungrouped" | M0'da dogrulandi. | Orta. |
-| 4 | Parser: tree-sitter (WASM) AST, ayri child process, `--liftoff-only` | Node 24/25 uzerinde V8 optimize edici WASM derleyicisi bellek yetersizligiyle cokuyor. | Dusuk risk. |
-| 5 | JSON Schema Draft 2020-12, dogrulama Ajv | | Kolay. |
-| 6 | **Guvenli mod varsayilan:** templating, data bucket, callback, CRUD/WebSocket route'lari kapali | `@faker-js/faker` code-execution advisory'si Mockoon paketleri uzerinden geliyor; paylasilan dosyadan kod calismamali. | Proje ayariyla acilabilir. |
-| 7 | Control API yalniz `127.0.0.1`, token (8 saat), Host/Origin kontrolu, CORS yok | DNS rebinding ve LAN erisimine karsi. | Kolay. |
-| 8 | Mock listener varsayilan `127.0.0.1`; LAN yalnizca acik kullanici secimiyle | Fiziksel iOS cihaz icin gerekli. | Kolay. |
-| 9 | AI: once MCP server, sonra UI icinden opsiyonel AI CLI (yalniz GitHub Copilot CLI); varsayilan kapali, her gonderim onizleme + hash'li onay gerektirir | Gizlilik; AI hicbir temel akisi zorunlu kilmaz. | Kolay (provider arayuzu acik). |
-| 10 | Copilot CLI bos gecici `--config-dir`, bos gecici cwd, izin listeli ortam degiskenleri, arac listesi bos, `shell`/`write` reddedilir | Kullanicinin normal yapilandirmasiyla CLI 25-90 sn yanit vermedi; izole config ile ~12 sn. Neden-sonuc MCP sunucularina kesin baglanmadi (Kayit). | Kolay. |
-| 11 | Runtime: kurulu Node >= 22.12; arac Node **kurmaz** | Sadelik. Kullanicinin istegiyle celisiyor olabilir (bkz. Bolum 3). | Orta. |
-| 12 | Paylasim dosya/git tabanli; ayri collection import/export UI'si yok | Mockoon dosya formati dogrudan paylasilir. Kullanicinin "Postman gibi JSON export/import" istegiyle farkli yorum. | Kolay (ekleme). |
-| 13 | "Mockoon" adi/logosu urun adinda ve UI'da kullanilmaz; lisans [NOTICE.md](../NOTICE.md) icinde | Marka riski (Kayit: Mockoon AB markasi). | Kolay. |
-| 14 | Dil: README/docs ASCII Turkce (diakritiksiz); kod ve CLI/UI metinleri Ingilizce | Mevcut dosyalarda gozlenen duzen. | Kolay. |
+| 1 | Use `@mockoon/commons` and `@mockoon/commons-server` **9.10.0** (MIT) as the mock engine, with exact pins; this is an independent npm package, not a Mockoon fork or extension | Features such as path parameters, scenarios, latency, proxy, CORS, and logging are ready to use; no signing cost; the same file also works with Mockoon CLI. A fork and building from scratch with Fastify were rejected. | Difficult: file format and runtime depend on the engine. |
+| 2 | Data format: `<name>.environment.json` (Mockoon) + `<name>.studio.json` (sidecar, `schemaVersion: 1`) | Can be committed to git, Mockoon-compatible, tool metadata is separate. | Medium. |
+| 3 | Collection = Mockoon folder at the root level; routes outside folders are "Ungrouped" | Verified in M0. | Medium. |
+| 4 | Parser: tree-sitter (WASM) AST, separate child process, `--liftoff-only` | On Node 24/25, the V8 optimizing WASM compiler crashes due to insufficient memory. | Low risk. |
+| 5 | JSON Schema Draft 2020-12, validation with Ajv | | Easy. |
+| 6 | **Safe mode by default:** templating, data bucket, callback, CRUD/WebSocket routes disabled | The `@faker-js/faker` code-execution advisory comes through Mockoon packages; shared files must not execute code. | Can be enabled through project settings. |
+| 7 | Control API on `127.0.0.1` only, token (8 hours), Host/Origin checks, no CORS | Protects against DNS rebinding and LAN access. | Easy. |
+| 8 | Mock listener defaults to `127.0.0.1`; LAN binding only by explicit user choice | Required for physical iOS devices. | Easy. |
+| 9 | AI: MCP server first, then optional AI CLI from the UI (GitHub Copilot CLI only); disabled by default, every submission requires preview + hash-based approval | Privacy; AI is not required for any core flow. | Easy (provider interface is open). |
+| 10 | Copilot CLI gets an empty temporary `--config-dir`, empty temporary cwd, allowlisted environment variables, empty tool list; `shell`/`write` are denied | With the user's normal configuration the CLI did not respond for 25-90 seconds; with isolated config it took about 12 seconds. Cause was not definitively tied to MCP servers (Recorded). | Easy. |
+| 11 | Runtime: installed Node >= 22.12; the tool does **not** install Node | Simplicity. May conflict with the user's request (see section 3). | Medium. |
+| 12 | Sharing is file/git-based; there is no separate collection import/export UI | Mockoon files can be shared directly. This is a different interpretation of the user's "JSON export/import like Postman" request. | Easy (to add). |
+| 13 | The name/logo "Mockoon" is not used in the product name or UI; license is in [NOTICE.md](../NOTICE.md) | Trademark risk (Recorded: Mockoon AB trademark). | Easy. |
+| 14 | Docs are English (user decision 2026-11-08) | User decision. | Easy. |
 
-## 5. Neler gelistirildi (M0-M5)
+## 5. What was implemented (M0-M5)
 
-Ayrintili kanitlar [Roadmap](ROADMAP.md) dosyasindaki "Sonuc" bolumlerindedir.
+Detailed evidence is in the "Results" sections of the [Roadmap](ROADMAP.md).
 
-| Asama | Kapsam | Durum |
+| Milestone | Scope | Status |
 |---|---|---|
-| M0 | Motor prototipi, collection modeli, yan dosya, parser/WASM, JSON Schema, Node araligi, MCP SDK | Uygulandi |
-| M1 | Gson/Kotlinx/Moshi/Swift adapter'lari, generic/typealias/recursive, naming ve tarih ayarlari, yerel uretici, `generate` | Uygulandi |
-| M2 | `serve`, cakisma/golgeleme kontrolu, 404 JSON, control API, web UI, dosya katmani, CORS, log maskeleme, baglanti rehberi | Uygulandi |
-| M3 | Stdio MCP server, alti dar tool, root disina erisim engeli | Uygulandi |
-| M4 | UI icinden opsiyonel AI CLI (Copilot CLI), onizleme/onay, izole process, yerel fallback | Uygulandi |
-| M5 | Proxy fallback (kapali baslar), LAN binding UI'si, model degisikligi kontrolu (`check`), OpenAPI 3.1 export | Uygulandi |
+| M0 | Engine prototype, collection model, sidecar, parser/WASM, JSON Schema, Node range, MCP SDK | Implemented |
+| M1 | Gson/Kotlinx/Moshi/Swift adapters, generic/typealias/recursive, naming and date settings, local generator, `generate` | Implemented |
+| M2 | `serve`, conflict/shadowing checks, JSON 404, control API, web UI, file layer, CORS, log masking, connection guide | Implemented |
+| M3 | Stdio MCP server, six narrow tools, block access outside root | Implemented |
+| M4 | Optional AI CLI from the UI (Copilot CLI), preview/approval, isolated process, local fallback | Implemented |
+| M5 | Proxy fallback (disabled by default), LAN binding UI, model change check (`check`), OpenAPI 3.1 export | Implemented |
 
 **CLI:** `init`, `ui`, `serve`, `generate`, `check`, `export openapi`, `snippets`, `mcp`.
 
-**MCP tool'lari:** `list_collections`, `parse_model`, `get_schema`, `generate_sample`, `validate_body`, `save_scenario` (shell veya keyfi dosya tool'u yok).
+**MCP tools:** `list_collections`, `parse_model`, `get_schema`, `generate_sample`, `validate_body`, `save_scenario` (no shell or arbitrary file tools).
 
-**Boyut (yaklasik, bugun olculdu):** `src/` ~6.5 bin satir TypeScript, `ui/src/` ~1.7 bin satir, `test/` ~1.9 bin satir; 9 test dosyasi, 116 test.
+**Size (approximate, measured today):** `src/` ~6.5 thousand lines of TypeScript, `ui/src/` ~1.7 thousand lines, `test/` ~1.9 thousand lines; 9 test files, 116 tests.
 
-## 6. Dogrulama durumu
+## 6. Verification status
 
-### Bugun calistirildi (2026-11-08, Node v25.9.0, npm 11.12.1)
+### Run today (2026-11-08, Node v25.9.0, npm 11.12.1)
 
-| Kontrol | Sonuc |
+| Check | Result |
 |---|---|
-| `npm run lint` (sunucu + UI tip kontrolu) | Gecti |
-| `npm run build` (tsc + Vite) | Gecti; `node dist/cli/main.js --version` -> `0.1.0` |
-| `npm test` (tam paket) | **115 / 116 gecti, 1 basarisiz** (`test/ai.test.ts`) |
-| `npx vitest run test/ai.test.ts` (3 ayri calistirma) | Her seferinde 2 basarisiz, 12 gecti |
+| `npm run lint` (server + UI type check) | Passed |
+| `npm run build` (tsc + Vite) | Passed; `node dist/cli/main.js --version` -> `0.1.0` |
+| `npm test` (full suite) | **115 / 116 passed, 1 failed** (`test/ai.test.ts`) |
+| `npx vitest run test/ai.test.ts` (3 separate runs) | 2 failed and 12 passed each time |
 
-Onceki oturum (2026-11-04) lint, build ve 116 testin tamaminin gectigini ve testlerin Node 22, 24, 25'te gectigini bildirmisti (Kayit). Bugunku fark asagidaki zamanlama sorunundan kaynaklaniyor.
+The previous session (2026-11-04) reported that lint, build, and all 116 tests passed, and that tests passed on Node 22, 24, and 25 (Recorded). Today's difference is caused by the timing issue below.
 
-### Basarisiz testler: test kararsizligi, urun hatasi degil
+### Failed tests: test flakiness, not a product bug
 
-- **Testler:** `test/ai.test.ts` icinde `falls back on timeout and kills the process` ve `stops the process when the request is cancelled`.
-- **Belirti:** `expected [Function] to throw an error` (`process.kill(call?.pid ?? 0, 0)` hata firlatmiyor).
-- **Kanit (bugun olculdu):**
-  - Testin birebir senaryosu (400 ms timeout, ayni sahte CLI betigi, gercek `runCli`) vitest disinda 8 kez calistirildi: 6 calistirmada sahte CLI, 400 ms dolmadan kayit dosyasini yazamadi; kayit yazilan 2 calistirmada child process zaman asimindan 300 ms sonra yasamiyordu.
-  - 1500 ms timeout ile gercek `runCli`: child process zaman asimindan sonra olduruldu (300 ms sonra yasamiyor).
-  - Bu makinede `node -e 0` soguk baslangici 110-117 ms; shebang'li bir betigin ilk calistirmasi 545 ms surdu (sonrakiler ~130 ms); yuk ortalamasi ~4.
-- **Cikarim (kod okumasindan):** Test, sahte CLI kaydini 400 ms icinde yazacagini varsayiyor. Yazilmadiysa `call` tanimsiz kalir ve assertion `process.kill(0, 0)` ile calisir; bu POSIX'te kendi process grubunu hedefler ve hata firlatmaz. Bu assertion yolu dogrudan ayri olarak denenmedi.
-- **Sonuc:** `src/ai/cli-runner.ts` zaman asimi ve iptalde sureci dogru oldurduruyor; basarisizlik test zamanlamasi (CPU yukune duyarli yaris) kaynakli.
-- **Onerilen duzeltme (uygulanmadi):** Zaman asimi/iptalden once kayit dosyasinin gorunmesini bekle (yoklama), `call` tanimli oldugunu assert et ve timeout degerini artir. CI'da bu test ayni nedenle kararsiz olabilir.
+- **Tests:** `falls back on timeout and kills the process` and `stops the process when the request is cancelled` in `test/ai.test.ts`.
+- **Symptom:** `expected [Function] to throw an error` (`process.kill(call?.pid ?? 0, 0)` does not throw).
+- **Evidence (measured today):**
+  - The exact test scenario (400 ms timeout, same fake CLI script, real `runCli`) was run outside Vitest 8 times: in 6 runs, the fake CLI did not write its call log before 400 ms elapsed; in the 2 runs where the log was written, the child process was no longer alive 300 ms after the timeout.
+  - With a 1500 ms timeout, real `runCli` killed the child process (it was no longer alive 300 ms later).
+  - On this machine, cold startup for `node -e 0` takes 110-117 ms; the first run of a shebang script took 545 ms (later runs took ~130 ms); average system load is ~4.
+- **Inference (from code reading):** The test assumes the fake CLI will write its call log within 400 ms. If it does not, `call` stays undefined and the assertion runs `process.kill(0, 0)`; on POSIX, this targets its own process group and does not throw. This assertion path was not tested separately.
+- **Conclusion:** `src/ai/cli-runner.ts` kills the process correctly on timeout and cancellation; the failure is caused by test timing (a CPU-load-sensitive race).
+- **Recommended fix (not implemented):** Wait until the call log appears (polling) before the timeout/cancellation, assert that `call` is defined, and increase the timeout. This test may be flaky in CI for the same reason.
 
-### Kayit (bu oturumda tekrar edilmedi)
+### Recorded (not rerun in this session)
 
-- Android Emulator (Pixel_8a AVD) `10.0.2.2:<port>` ve `adb reverse` + `localhost` ile mock'tan dogru response aldi; iOS Simulator (iPhone 17) `localhost:<port>` ile dogru response aldi. Bu yalnizca ag erisimini dogrular.
-- Yerel UI tarayicida elle denendi (collection olusturma, modelden body uretme, sunucu baslatma, istek listesi).
-- Mockoon CLI 9.10.0 ve Mockoon'un kendi `EnvironmentSchema` dogrulamasi ayni dosyayi kabul etti.
-- Gercek Copilot CLI 1.0.27 ile tek sentetik modelde ~12 sn'de gecerli yanit alindi.
-- Lisans taramasi (production agaci, 234 paket): hepsi izin verici lisansli; tek istisna `@jmespath-community/jmespath` (MPL-2.0, degistirilmeden kullaniliyor).
+- Android Emulator (Pixel_8a AVD) received the correct response from the mock through `10.0.2.2:<port>` and `adb reverse` + `localhost`; iOS Simulator (iPhone 17) received the correct response through `localhost:<port>`. This verifies network access only.
+- The local UI was manually tried in a browser (create collection, generate body from model, start server, request list).
+- Mockoon CLI 9.10.0 and Mockoon's own `EnvironmentSchema` validation accepted the same file.
+- With real Copilot CLI 1.0.27, a valid response was received for one synthetic model in ~12 seconds.
+- License scan (production tree, 234 packages): all have permissive licenses; the only exception is `@jmespath-community/jmespath` (MPL-2.0, used without modification).
 
-## 7. Dogrulanmamis / acik maddeler
+## 7. Unverified / open items
 
-Hicbiri denenmedi; "calisiyor" diye raporlanmamalidir.
+None of these have been tried; they must not be reported as "working."
 
-- **Mockoon desktop:** Dosya acma ve iki yonlu duzenleme elle denenmedi (desktop kurulu degil).
-- **Fiziksel cihazlar:** Android (`adb reverse`) ve iOS (LAN binding) denenmedi.
-- **WebView icinde CORS:** Yalnizca HTTP seviyesinde test edildi.
-- **Uygulama ici ag ayarlari:** Debug `network_security_config` (Android) ve `NSAllowsLocalNetworking` (iOS) bir uygulama projesiyle denenmedi.
-- **Windows ve Linux:** Denenmedi. CI matrisi yalnizca `ubuntu-latest` ve `macos-latest` (Node 22, 24) icin yazildi ve **hic calistirilmadi** (proje bir git deposu degil).
-- **Ekip kod tabani taramasi:** Gercek modeller uzerinde `mock-studio generate --list` calistirilip raporlanan `issues` listesine bakilmadi. Moshi, generic wrapper, sealed class kullanimi bu yuzden bilinmiyor.
-- **Kiro/Copilot chat ile MCP akisi:** Yalnizca SDK istemcisiyle protokol seviyesinde denendi.
-- **OpenAPI export:** Harici bir OpenAPI validator ile denenmedi.
-- **`@mockoon/commons-server` kararliligi:** Genel kullanim icin stabil API garantisi yok; exact pin ve entegrasyon testleriyle korunuyor.
-- **`npm audit`:** `@faker-js/faker` (code execution) ve `joi` (DoS) advisory'leri Mockoon paketleri uzerinden geliyor; `npm audit fix` Mockoon'u eski surume dusurur, **yapilmamalidir**. Faker riski guvenli modla kapatiliyor.
+- **Mockoon desktop:** Opening and editing files in both directions was not manually tested (desktop is not installed).
+- **Physical devices:** Android (`adb reverse`) and iOS (LAN binding) were not tested.
+- **CORS in WebView:** Tested at HTTP level only.
+- **In-app network settings:** Debug `network_security_config` (Android) and `NSAllowsLocalNetworking` (iOS) were not tested with an app project.
+- **Windows and Linux:** Not tested. The CI matrix is configured only for `ubuntu-latest` and `macos-latest` (Node 22, 24) and has **never been run** (the project is not a git repository).
+- **Team codebase scan:** `mock-studio generate --list` was not run on real models, and the reported `issues` list was not reviewed. Use of Moshi, generic wrappers, and sealed classes is therefore unknown.
+- **MCP flow with Kiro/Copilot chat:** Tested only at the protocol level with an SDK client.
+- **OpenAPI export:** Not tested with an external OpenAPI validator.
+- **`@mockoon/commons-server` stability:** No stable API guarantee for general use; protected by exact pinning and integration tests.
+- **`npm audit`:** The `@faker-js/faker` (code execution) and `joi` (DoS) advisories come through Mockoon packages; `npm audit fix` would downgrade Mockoon and **must not be run**. The Faker risk is disabled by safe mode.
 
-### Ertelenenler (ROADMAP M5 tablosunda kabul kriterleriyle)
+### Deferred (with acceptance criteria in the ROADMAP M5 table)
 
-- Request'e gore response kurallari icin UI (kurallar dosyada calisir; duzenleme icin Mockoon desktop).
-- Sealed class / polymorphism ve kalitim (acikca raporlanir).
-- Tek binary veya Docker dagitimi (Docker bu makinede yok).
+- UI for request-based response rules (rules work in the file; edit them with Mockoon desktop).
+- Sealed class / polymorphism and inheritance (reported explicitly).
+- Single binary or Docker distribution (Docker is not available on this machine).
 
-### Yayin oncesi
+### Before release
 
-- `@mock-api-studio` npm kapsaminin sahipligi dogrulanmadi (duz `mock-api-studio` adi alinmis).
-- **Proje bir git deposu degil:** `.git` yok, remote yok. README'deki `git+ssh://<sunucu>/<org>/<repo>.git` kurulum yolu bir depo olusturulana kadar kullanilamaz.
-- Kurumsal kullanim oncesi sirketin acik kaynak arac onayi (MPL-2.0 bagimliligi notlandi).
+- Ownership of the `@mock-api-studio` npm scope is unverified (the plain `mock-api-studio` name is taken).
+- **The project is not a git repository:** no `.git`, no remote. The `git+ssh://<server>/<org>/<repo>.git` installation path in the README cannot be used until a repository is created.
+- Company open-source tool approval is needed before corporate use (the MPL-2.0 dependency was noted).
 
-## 8. Kullanicidan karar bekleyen konular
+## 8. Decisions pending from the user
 
-**Guncelleme 2026-11-08 (kullanici yaniti):** Asagidaki dort soru yanitlandi. (1) Mockoon motoru MIT ve ucretsiz oldugu icin kullanilmaya devam eder. (2) Node yoksa kurulum araci kurmali; kurulum ve guncelleme son kullanici icin kolay olmali (M13). (3) Postman benzeri export/import plana alindi (M12). (4) Kurulu tum AI CLI'lari desteklenecek (M11). Ek kararlar: proje kisisel ve acik kaynak (MIT, GitHub); hedef kullanim gelistirmede MCP ile LLM'ler, testte dashboard; header/parametre/body/sira kosullu response'lar (M7-M8); model degisince body guncelleme (M9). Ayrinti: [Roadmap - v1 plani](ROADMAP.md#v1-plani-m6-m17), [Mimari - v1 tasarimlari](ARCHITECTURE.md#v1-tasarimlari-oneri).
+**Update 2026-11-08 (user response):** The following four questions were answered. (1) Continue using the Mockoon engine because it is MIT-licensed and free. (2) If Node is missing, the installer should install it; installation and updates should be easy for end users (M13). (3) Postman-like export/import was added to the plan (M12). (4) Support all installed AI CLIs (M11). Additional decisions: the project is personal and open source (MIT, GitHub); intended use is LLMs through MCP during development and the dashboard during testing; conditional responses based on headers/parameters/body/order (M7-M8); update body when the model changes (M9). Details: [Roadmap - v1 plan](ROADMAP.md#v1-plan-m6-m17), [Architecture - v1 designs](ARCHITECTURE.md#v1-designs-proposal).
 
-Acik kalan sorular: acik kaynak dokuman dili (Ingilizce oneriliyor). Oneri havuzu 2026-11-08'de onaylandi ve M14-M17 olarak plana alindi.
+Remaining open question: language for open-source documentation (English was proposed). The proposal set was approved on 2026-11-08 and added to the plan as M14-M17.
 
-Asagidaki metin 2026-11-08 oncesi durumdur ve tarihce olarak korunur.
+The text below reflects the status before 2026-11-08 and is preserved as history.
 
-1. **Mockoon motoru.** Kullanici "Mockoon ucretli, uygun degil" demisti. Urun Mockoon'un MIT lisansli motor paketlerini kutuphane olarak kullaniyor (Kayit: Mockoon repo ve paketleri MIT; Mockoon'un yerlesik AI asistani ucretli Cloud planlarina bagli). Erisilebilen oturum kayitlarinda bu gecis icin acik bir onay veya itiraz kaydi bulamadim. Kullanici bunun kapsamini ve lisans durumunu bilerek onayliyor mu?
-2. **Node.js otomatik kurulumu.** Kullanici "yoksa once kurup sonra devam edecek bir yapi" istemisti; arac yalnizca kontrol edip hata veriyor. Bootstrap istenirse tasarim, onay ve guvenlik (checksum, kullanici dizini, `sudo` yok) acisindan ayri ele alinmali.
-3. **Postman benzeri JSON export/import.** Tek dosya veya bundle olarak collection import/export UI'si/API'si isteniyor mu, yoksa dosya/git tabanli paylasim yeterli mi?
-4. **Kiro CLI provider'i** gerekiyor mu, yoksa Copilot CLI + MCP yeterli mi?
+1. **Mockoon engine.** The user said, "Mockoon is paid and unsuitable." The product uses Mockoon's MIT-licensed engine packages as a library (Recorded: Mockoon's repository and packages are MIT-licensed; Mockoon's built-in AI assistant is tied to paid Cloud plans). I could not find an explicit approval or objection to this change in the accessible session records. Does the user knowingly approve the scope and license status?
+2. **Automatic Node.js installation.** The user asked for "a setup that installs it first if it isn't there, then continues"; the tool only checks and reports an error. If bootstrap is desired, design, approval, and security (checksum, user directory, no `sudo`) should be handled separately.
+3. **Postman-like JSON export/import.** Is collection import/export through the UI/API as a single file or bundle required, or is file/git-based sharing sufficient?
+4. **Kiro CLI provider.** Is one required, or are Copilot CLI + MCP sufficient?
 
-## 9. Kod haritasi
+## 9. Code map
 
-Tek paket, ayri dizinler. Ayrintili tablo: [Gelistirme rehberi - Modul sinirlari](DEVELOPMENT.md#modul-sinirlari).
+Single package, separate directories. Detailed table: [Development guide - Module boundaries](DEVELOPMENT.md#module-boundaries).
 
-| Dizin | Sorumluluk | Mockoon bagimliligi |
+| Directory | Responsibility | Mockoon dependency |
 |---|---|---|
-| `src/parser/` | tree-sitter AST -> dil bagimsiz IR; `kotlin/{gson,kotlinx,moshi}.ts`, `swift/`; `host.ts` + `worker.ts` ayri child process | yok |
-| `src/schema/` | IR -> JSON Schema, naming/tarih ayarlari, Ajv dogrulama | yok |
-| `src/generator/` | Deterministik yerel uretici (alan adi heuristic'leri, varyantlar, seed) | yok |
-| `src/core/` | Domain tipleri, `ProjectService`, cakisma kontrolu, model servisi, schema diff, OpenAPI, guvenli yol | yok |
-| `src/store/` | Mockoon environment + yan dosya, atomik yazma, dosya izleme | **var** |
-| `src/runtime/` | Turetilmis environment, guvenli mod, motoru calistirma, maskeli log | **var** |
-| `src/control-api/` | Fastify, yalniz loopback, UI asset'leri | yok |
-| `src/mcp/` | MCP tool'lari | yok |
-| `src/ai/` | Provider arayuzu, process calistirici (`cli-runner.ts`), Copilot provider, prompt | yok |
-| `src/cli/` | Komutlar (`main.ts` giris noktasi) | yok |
-| `ui/` | React + Vite arayuzu; `src/core/view.ts` gibi saf tip dosyalarini import eder | yok |
-| `test/` | Vitest; `fixtures/` sentetik Kotlin/Swift modelleri; testler `dist/` uzerinde calisir | - |
+| `src/parser/` | tree-sitter AST -> language-independent IR; `kotlin/{gson,kotlinx,moshi}.ts`, `swift/`; `host.ts` + `worker.ts` in a separate child process | no |
+| `src/schema/` | IR -> JSON Schema, naming/date settings, Ajv validation | no |
+| `src/generator/` | Deterministic local generator (field-name heuristics, variants, seed) | no |
+| `src/core/` | Domain types, `ProjectService`, conflict checking, model service, schema diff, OpenAPI, safe paths | no |
+| `src/store/` | Mockoon environment + sidecar, atomic writes, file watching | **yes** |
+| `src/runtime/` | Derived environment, safe mode, running the engine, masked logs | **yes** |
+| `src/control-api/` | Fastify, loopback only, UI assets | no |
+| `src/mcp/` | MCP tools | no |
+| `src/ai/` | Provider interface, process runner (`cli-runner.ts`), Copilot provider, prompt | no |
+| `src/cli/` | Commands (`main.ts` entry point) | no |
+| `ui/` | React + Vite interface; imports pure type files such as `src/core/view.ts` | no |
+| `test/` | Vitest; `fixtures/` contains synthetic Kotlin/Swift models; tests run on `dist/` | - |
 
-Mockoon paketlerine yalnizca `store/` ve `runtime/` dogrudan bagimlidir.
+Only `store/` and `runtime/` depend directly on Mockoon packages.
 
-**Onemli mekanikler**
+**Important mechanics**
 
-- Motor ilk eslesen route'u secer ve cakismayi kendisi raporlamaz; cakisma kontrolu `core/` icinde runtime'a gecmeden once yapilir.
-- Pasif collection'lar dosyada kalir; runtime, route'lari cikararak turetilmis bir environment kurar.
-- Degisiklikler `MockoonServer.updateEnvironment()` ile restartsiz yansir; yalniz port/host degisirse runtime yeniden baslar.
-- Eslesmeyen istekler icin motorun 404'u JSON olmadigindan, OPTIONS haric her method icin catch-all route eklenir; proxy aciksa eklenmez.
-- Body ham string olarak saklanir (64-bit sayilarin hassasiyeti icin).
-- `src/parser/host.ts` calisma zamaninda `dist/parser/worker.js`'i bulur; bu yuzden `npm test` oncesi `test/global-setup.ts` `tsc` ile derleme yapar.
+- The engine selects the first matching route and does not report conflicts itself; conflict checks happen in `core/` before entering the runtime.
+- Inactive collections remain in the file; the runtime creates a derived environment by removing their routes.
+- Changes are reflected without restart through `MockoonServer.updateEnvironment()`; the runtime restarts only if the port/host changes.
+- Since the engine's 404 is not JSON for unmatched requests, a catch-all route is added for every method except OPTIONS; it is omitted if the proxy is enabled.
+- Bodies are stored as raw strings (to preserve the precision of 64-bit numbers).
+- At runtime, `src/parser/host.ts` finds `dist/parser/worker.js`; therefore, before `npm test`, `test/global-setup.ts` compiles with `tsc`.
 
-## 10. Calisma ortami ve komutlar
+## 10. Runtime and commands
 
-| Komut | Amac | Bugun calistirildi |
+| Command | Purpose | Run today |
 |---|---|---|
-| `npm install` / `npm ci` | Bagimliliklar; `prepare` derlemeyi de yapar | Hayir (`node_modules` mevcut) |
-| `npm run build` | Sunucu (tsc -> `dist/`) ve UI (Vite -> `dist/ui`) | Evet |
-| `npm run lint` | Sunucu ve UI tip kontrolu | Evet |
-| `npm test` | Vitest (oncesinde `tsc` ile `dist/` derlenir) | Evet |
-| `npm run dev:ui` | Vite dev sunucusu; `MOCK_STUDIO_API=http://127.0.0.1:<ui-portu>` ile `ui` komutuna baglanir | Hayir |
-| `npm run notice` | `NOTICE.md` uretir | Hayir |
-| `node dist/cli/main.js --help` | CLI | `--version` evet |
+| `npm install` / `npm ci` | Dependencies; `prepare` also builds | No (`node_modules` exists) |
+| `npm run build` | Server (tsc -> `dist/`) and UI (Vite -> `dist/ui`) | Yes |
+| `npm run lint` | Server and UI type check | Yes |
+| `npm test` | Vitest (compiles `dist/` with `tsc` first) | Yes |
+| `npm run dev:ui` | Vite dev server; connects to the `ui` command with `MOCK_STUDIO_API=http://127.0.0.1:<ui-port>` | No |
+| `npm run notice` | Generates `NOTICE.md` | No |
+| `node dist/cli/main.js --help` | CLI | `--version` yes |
 
-Gereksinim: Node.js >= 22.12 (`engines`). CI matrisi Node 22 ve 24; yerelde Node 25.9 kullanildi. Paket yoneticisi npm + `package-lock.json`.
+Requirement: Node.js >= 22.12 (`engines`). CI matrix uses Node 22 and 24; Node 25.9 was used locally. Package manager is npm + `package-lock.json`.
 
-Kullanim ornekleri icin [README](../README.md#kullanim).
+For usage examples, see the [README](../README.md#usage).
 
-**Notlar**
+**Notes**
 
-- Vitest calisirken `DEP0060` (`util._extend`) kullanimdan kaldirma uyarisi cikiyor; basarisizlikla iliskili degil.
-- `.agent-work/` onceki ajan oturumlarinin artifaktlaridir ve `.gitignore` icindedir; devam icin gerekmez.
-- `dist/` ve `node_modules/` `.gitignore` icindedir.
+- Vitest emits a deprecation warning for `DEP0060` (`util._extend`); it is unrelated to the failure.
+- `.agent-work/` contains artifacts from previous agent sessions and is in `.gitignore`; it is not needed to continue.
+- `dist/` and `node_modules/` are in `.gitignore`.
 
-## 11. Claude Code icin calisma kurallari
+## 11. Working rules for Claude Code
 
-Mevcut dokumanlarda ve karar kaydinda yazili kurallardan turetilmistir.
+Derived from rules written in the existing documents and decision record.
 
-1. **Oncelik:** Once [Bolum 8](#8-kullanicidan-karar-bekleyen-konular)deki kararlari kullaniciya sor; bu kararlar mimariyi etkileyebilir.
-2. **Dogruluk:** "Dogrulandi" yalnizca calistirilan test veya elle yapilan kontrol icin kullanilir. Yeni dogrulama yapinca ROADMAP "Sonuc" bolumunu ve [manuel dogrulama matrisini](DEVELOPMENT.md#manuel-dogrulama-matrisi) guncelle. Var olmayan komutlari calisir gibi dokumante etme.
-3. **Bagimliliklar:** Exact version kullan. `@mockoon/commons` ve `@mockoon/commons-server` ayni surumde kalsin; birlikte guncelle ([Mockoon guncelleme proseduru](DEVELOPMENT.md#bagimlilik-kurallari)). `npm audit fix` calistirma. `web-tree-sitter` 0.24.7 ile `tree-sitter-wasms` 0.1.13'u 0.27'ye yukseltme (grammar'larla uyumsuz).
-4. **Guvenlik degistirilmez:** Control API loopback; LAN yalniz acik secimle; guvenli mod varsayilan; log maskeleme ve body loglamanin kapali olmasi; telemetri yok; AI onizleme/onay/hash zorunlulugu; MCP'de shell veya serbest dosya tool'u yok.
-5. **Kod calistirma yok:** Kullanici model kodu, import edilen JSON veya prompt hicbir zaman shell komutu olarak calistirilmaz; parser kaynak kodu derlemez ve ayri process'te kalir.
-6. **Test verisi:** Fixture'lar sentetik olur; musteri veya production model kodu fixture'a kopyalanmaz.
-7. **Marka:** "Mockoon" adi urun adinda, UI'da veya ikonlarda kullanilmaz; bagimlilik ve lisans olarak belirtilir.
-8. **Kapsam disiplini:** Bir milestone'un cikis kriterleri gecmeden sonraki fazin ozelliklerini temel akisa ekleme (ROADMAP "Faz gecis kurali").
-9. **Dokumanlar:** Mevcut dosyalar ASCII Turkce yazilmis; ayni duzeni koru.
-10. **Surec:** Is bittiginde lint, build ve testi calistir ve sonucu oldugu gibi raporla.
+1. **Priority:** First ask the user about the decisions in [section 8](#8-decisions-pending-from-the-user); they may affect the architecture.
+2. **Accuracy:** Use "Verified" only for tests that were run or checks performed manually. After new verification, update the ROADMAP "Results" section and the [manual verification matrix](DEVELOPMENT.md#manual-verification-matrix). Do not document nonexistent commands as if they worked.
+3. **Dependencies:** Use exact versions. Keep `@mockoon/commons` and `@mockoon/commons-server` on the same version; update them together ([Mockoon update procedure](DEVELOPMENT.md#dependency-rules)). Do not run `npm audit fix`. Do not upgrade `web-tree-sitter` 0.24.7 and `tree-sitter-wasms` 0.1.13 to 0.27 (incompatible with the grammars).
+4. **Do not change security:** Control API stays on loopback; LAN only by explicit choice; safe mode is the default; log masking and body logging disabled; no telemetry; AI preview/approval/hash required; no shell or unrestricted file tools in MCP.
+5. **Do not execute code:** User model code, imported JSON, or prompts are never run as shell commands; the parser does not compile source code and stays in a separate process.
+6. **Test data:** Fixtures must be synthetic; customer or production model code must not be copied into fixtures.
+7. **Brand:** The name "Mockoon" is not used in the product name, UI, or icons; it is identified as a dependency and license.
+8. **Scope discipline:** Do not add features from the next phase to the core flow before the current milestone's exit criteria are met (ROADMAP "Phase transition rule").
+9. **Documentation:** Docs are English (user decision 2026-11-08).
+10. **Process:** When work is done, run lint, build, and tests, and report the results as they are.
 
-## 12. Onerilen ilk adimlar
+## 12. Recommended first steps
 
-1. Bu belge ve [Roadmap](ROADMAP.md) "Sonuc" bolumlerini oku; `npm run lint && npm run build && npm test` ile durumu yeniden olc.
-2. `test/ai.test.ts` icindeki iki kararsiz testi duzelt (kayit dosyasini bekle, `call` tanimli oldugunu assert et, timeout degerini artir) ve tam paketi birkac kez calistirip kararlilik dogrula.
-3. [Bolum 8](#8-kullanicidan-karar-bekleyen-konular)deki sorulari kullaniciyla netlestir; yanita gore Node bootstrap, collection import/export veya Kiro provider'i planla.
-4. Projeyi git deposuna cevir (kullanici onayiyla) ve CI'i ilk kez calistir; Linux ve Node 22 sonuclarini kaydet.
-5. Gercek ekip modelleri (Android Gson, KMP Kotlinx, Swift Codable) uzerinde `mock-studio generate --list` calistirip `issues` listesine gore parser kapsamini guncelle.
-6. Acik dogrulamalari sirayla kapat: Mockoon desktop, fiziksel cihazlar, WebView CORS, uygulama icinde cleartext/ATS, Kiro/Copilot chat ile MCP.
-7. Yayin oncesi: npm kapsam sahipligi, paket adi, lisans onayi.
+1. Read this document and the "Results" sections of the [Roadmap](ROADMAP.md); remeasure the status with `npm run lint && npm run build && npm test`.
+2. Fix the two flaky tests in `test/ai.test.ts` (wait for the call log file, assert that `call` is defined, increase the timeout), then run the full suite several times to verify stability.
+3. Clarify the questions in [section 8](#8-decisions-pending-from-the-user) with the user; based on the answers, plan Node bootstrap, collection import/export, or a Kiro provider.
+4. Turn the project into a git repository (with user approval) and run CI for the first time; record Linux and Node 22 results.
+5. Run `mock-studio generate --list` on real team models (Android Gson, KMP Kotlinx, Swift Codable) and update parser coverage based on the `issues` list.
+6. Close open verification items in order: Mockoon desktop, physical devices, WebView CORS, in-app cleartext/ATS, MCP with Kiro/Copilot chat.
+7. Before release: npm scope ownership, package name, license approval.
 
-## 13. Kaynaklar
+## 13. Sources
 
-- [README](../README.md): kurulum ve kullanim.
-- [Urun gereksinimleri](PRODUCT_REQUIREMENTS.md), [Roadmap](ROADMAP.md), [Mimari](ARCHITECTURE.md), [Gelistirme rehberi](DEVELOPMENT.md), [NOTICE](../NOTICE.md).
+- [README](../README.md): installation and usage.
+- [Product requirements](PRODUCT_REQUIREMENTS.md), [Roadmap](ROADMAP.md), [Architecture](ARCHITECTURE.md), [Development guide](DEVELOPMENT.md), [NOTICE](../NOTICE.md).

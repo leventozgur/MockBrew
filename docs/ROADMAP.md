@@ -1,291 +1,291 @@
 # Roadmap
 
-Sure tahmini verilmez; her asama cikis kriterleriyle kapatilir. Oncelik sirasi, urunun ayirt edici degerine (modelden uretim) gore belirlenmistir.
+No estimates are given; each milestone is closed against its exit criteria. Priorities are based on the product's differentiating value (from model to production).
 
-Durum: M0-M5 uygulanmistir; M6-M17 planlandi (bkz. [v1 plani](#v1-plani-m6-m17)). Her asamanin sonunda "Sonuc" bolumu kanitlari ve henuz dogrulanmayan noktalari listeler. "Dogrulandi" yalnizca calistirilan test veya elle yapilan kontrol icin kullanilir; ekip kod tabani, Mockoon desktop, fiziksel cihazlar ve Windows/Linux bu ortamda denenemedigi icin acik madde olarak kalir.
+Status: M0-M5 have been implemented; M6-M17 are planned (see [v1 plan](#v1-plan-m6-m17)). The "Result" section at the end of each milestone lists evidence and points that have not yet been verified. "Verified" is used only for a test that was run or a manual check that was performed; the team's codebase, Mockoon desktop, physical devices, and Windows/Linux could not be tested in this environment and therefore remain open items.
 
-## Milestone 0: Teknik dogrulama
+## Milestone 0: Technical validation
 
-### Isler
+### Tasks
 
-- **Mockoon motoru prototipi:** `@mockoon/commons-server` ile bir environment'i programatik baslat/durdur; restartsiz guncelleme, disabled route, folder ve port davranisini dene.
-- **Collection modeli:** Collection = environment folder eslemesini dogrula; pasif collection mekanizmasini sec.
-- **Yan dosya:** Adini, konumunu ve ilk `schemaVersion` formatini belirle.
-- **Mockoon desktop uyumu:** Arac ile yazilan dosyanin desktop'ta acildigini ve dosya izleme ile iki yonlu degisikliklerin yansidigini dogrula.
-- **Parser:** tree-sitter Kotlin/Swift grammar'larini Node'da (WASM) dene; temsilci Gson, Kotlinx ve Codable fixture'lariyla parse edilebilirligi olc.
-- **Ekip kod tabani taramasi:** Moshi, generic wrapper, sealed class, decoder seviyesindeki naming/tarih stratejisi kullanimini cikar.
-- **JSON Schema:** Draft ve ortak schema temsilini sec.
-- **Platform:** Node LTS araligini, hedef OS test matrisini ve paket adini (scoped) sabitle.
-- **MCP:** MCP SDK'sini ve tool listesini belirle.
+- **Mockoon engine prototype:** Start/stop an environment programmatically with `@mockoon/commons-server`; try updating without restarting, disabled routes, folders, and port behavior.
+- **Collection model:** Validate the Collection = environment folder mapping; choose a mechanism for inactive collections.
+- **Sidecar file:** Determine its name, location, and initial `schemaVersion` format.
+- **Mockoon desktop compatibility:** Verify that a file written by the tool opens in desktop and that file watching reflects changes in both directions.
+- **Parser:** Try the tree-sitter Kotlin/Swift grammars in Node (WASM); measure parseability using representative Gson, Kotlinx, and Codable fixtures.
+- **Team codebase scan:** Identify usage of Moshi, generic wrappers, sealed classes, and decoder-level naming/date strategies.
+- **JSON Schema:** Choose a draft and shared schema representation.
+- **Platform:** Set the Node LTS range, target OS test matrix, and package name (scoped).
+- **MCP:** Choose the MCP SDK and tool list.
 
-### Cikis kriterleri
+### Exit criteria
 
-- Motor prototipi senaryo degisikligini restartsiz (veya fark ettirmeden) uyguluyor; kisitlar belgelenmis.
-- Collection eslemesi ve yan dosya formati sabitlenmis.
-- Her model turu icin parse basari/hata ornekleri ve unsupported listesi var.
-- Moshi ve diger kapsam kararlari ekip taramasina gore verilmis.
+- The engine prototype applies scenario changes without restarting (or without disruption); limitations are documented.
+- Collection mapping and sidecar format are fixed.
+- Parse success/failure examples and an unsupported list exist for each model type.
+- Decisions about Moshi and other scope are based on the team scan.
 
-### Sonuc
+### Result
 
-Kararlarin ayrintisi: [Mimari - M0 sonuclari](ARCHITECTURE.md#m0-teknik-dogrulama-sonuclari).
+Decision details: [Architecture - M0 technical validation results](ARCHITECTURE.md#m0-technical-validation-results).
 
-- **Motor prototipi:** Dogrulandi. `MockoonServer.updateEnvironment()` ile body/status/header/senaryo/latency degisikligi restartsiz yansir; port veya host degisirse runtime ayni port ayarlariyla kendini yeniden baslatir. Pasif collection, runtime icin turetilen environment'tan cikarilarak uygulanir.
-- **Collection modeli ve yan dosya:** Collection = kok seviyedeki Mockoon folder; folder disindaki route'lar "Ungrouped" sanal collection'indadir. Yan dosya `<ad>.studio.json`, `schemaVersion: 1`; gelecek major surum sessizce yuklenmez.
-- **Parser:** tree-sitter Kotlin ve Swift WASM grammar'lari Node'da calisir (`web-tree-sitter` 0.24.7 + `tree-sitter-wasms` 0.1.13; 0.27 grammar'larla uyumsuz). Node 24+ uzerinde V8'in WASM derleyicisi bu grammar'larla bellek yetersizligiyle cokuyor; bu yuzden parser `--liftoff-only` ile ayri bir child process'te calisir.
-- **JSON Schema:** Draft 2020-12, dogrulama Ajv 8.20.
-- **Platform:** Node >= 22.12; tum test paketi Node 22.23, 24.22 ve 25.9 uzerinde gecti. macOS disinda denenmedi; CI matrisi `.github/workflows/ci.yml` icinde tanimlidir.
-- **MCP:** `@modelcontextprotocol/sdk` 1.32.2, stdio; tool listesi [Mimari](ARCHITECTURE.md#mcp-server-birincil) bolumunde.
-- **Mockoon desktop uyumu:** Mockoon'un kendi `EnvironmentSchema` dogrulamasi ve Mockoon CLI 9.10.0 ile (otomatik test) dogrulandi. Desktop uygulamasi bu makinede kurulu olmadigi icin acilis ve iki yonlu duzenleme elle denenmedi; arac tarafinda dosya izleme ve dis degisikligi yukleme test edildi.
-- **Ekip kod tabani taramasi:** Yapilamadi (kod tabanina erisim yok). Moshi `@Json(name, ignore)` ucuz oldugu icin kapsama alindi; sealed class, kalitim, `init(from:)` ve custom serializer desteklenmeyip acikca raporlaniyor. Gercek modeller uzerinde `mock-studio generate --list` calistirilip raporlanan `issues` listesi bu maddeyi kapatir.
+- **Engine prototype:** Verified. Body/status/header/scenario/latency changes are reflected without a restart through `MockoonServer.updateEnvironment()`; if the port or host changes, the runtime restarts itself with the same port settings. Inactive collections are implemented by excluding them from the environment derived for the runtime.
+- **Collection model and sidecar:** Collection = a top-level Mockoon folder; routes outside folders belong to the virtual "Ungrouped" collection. Sidecar: `<name>.studio.json`, `schemaVersion: 1`; a future major version is not loaded silently.
+- **Parser:** The tree-sitter Kotlin and Swift WASM grammars run in Node (`web-tree-sitter` 0.24.7 + `tree-sitter-wasms` 0.1.13; incompatible with 0.27 grammars). On Node 24+, V8's WASM compiler crashes from memory exhaustion with these grammars, so the parser runs in a separate child process with `--liftoff-only`.
+- **JSON Schema:** Draft 2020-12, validation with Ajv 8.20.
+- **Platform:** Node >= 22.12; the full test suite passed on Node 22.23, 24.22, and 25.9. Not tested outside macOS; the CI matrix is defined in `.github/workflows/ci.yml`.
+- **MCP:** `@modelcontextprotocol/sdk` 1.32.2, stdio; the tool list is in the [Architecture](ARCHITECTURE.md#mcp-server-primary) section.
+- **Mockoon desktop compatibility:** Verified (automated test) with Mockoon's own `EnvironmentSchema` validation and Mockoon CLI 9.10.0. The desktop app is not installed on this machine, so opening and editing in both directions were not manually tested; file watching and loading external changes were tested in the tool.
+- **Team codebase scan:** Not done (no access to the codebase). Moshi `@Json(name, ignore)` was included because it was inexpensive; sealed classes, inheritance, `init(from:)`, and custom serializers are unsupported and explicitly reported. Running `mock-studio generate --list` on real models and reviewing the reported `issues` list will close this item.
 
-## Milestone 1: Modelden uretim cekirdegi
+## Milestone 1: Model-to-output core
 
-### Isler
+### Tasks
 
-- Gson, Kotlinx Serialization ve Swift Codable adapter'lari.
-- Ortak JSON Schema'ya normalizasyon; basit generic substitution; cok dosyali tip cozumleme.
-- Naming strategy ve tarih formati ayarlari.
-- Alan adi heuristic'li deterministik yerel uretici; minimal / tam / bos liste varyantlari.
-- Schema dogrulama.
-- `generate` CLI komutu: model girdisinden JSON'i stdout'a veya bir Mockoon route'una yazar.
+- Gson, Kotlinx Serialization, and Swift Codable adapters.
+- Normalize to shared JSON Schema; simple generic substitution; multi-file type resolution.
+- Naming strategy and date format settings.
+- Deterministic local generator with field-name heuristics; minimal / full / empty-list variants.
+- Schema validation.
+- `generate` CLI command: write JSON from model input to stdout or a Mockoon route.
 
-### Cikis kriterleri
+### Exit criteria
 
-- Uc model turu de generic wrapper dahil fixture testlerini geciyor.
-- Uretilen JSON semaya gore gecerli; naming ve tarih ayarlari ciktiya dogru yansiyor.
-- Desteklenmeyen yapilar ve cozumlenemeyen tipler acikca raporlaniyor.
+- Fixtures for all three model types, including generic wrappers, pass.
+- Generated JSON is valid against the schema; naming and date settings are reflected correctly in the output.
+- Unsupported structures and unresolved types are explicitly reported.
 
-### Sonuc
+### Result
 
-Dogrulandi (`test/models.test.ts`, 32 test): Gson, Kotlinx Serialization, Moshi ve Swift Codable adapter'lari; generic wrapper (`BaseResponse<Page<Product>>`), typealias, recursive tipler, cok dosyali cozumleme, naming (`identity`, `snake_case`) ve tarih (`iso8601`, epoch saniye/milisaniye) ayarlari, `Long` icin guvenli sayi araligi, minimal/tam/bos liste varyantlari, ayni seed = ayni cikti. Uretilen JSON her fixture, varyant ve ayar kombinasyonunda semaya gore gecerli. Raporlanan yapilar: sealed class, kalitim, custom serializer/adapter, `init(from:)`, property wrapper, enum associated value, hesaplanan/delegated alan, sozdizimi hatasi, cozumlenemeyen tip.
+Verified (`test/models.test.ts`, 32 tests): Gson, Kotlinx Serialization, Moshi, and Swift Codable adapters; generic wrapper (`BaseResponse<Page<Product>>`), typealias, recursive types, multi-file resolution, naming (`identity`, `snake_case`) and date (`iso8601`, epoch seconds/milliseconds) settings, safe numeric range for `Long`, minimal/full/empty-list variants, same seed = same output. Generated JSON is valid against the schema for every fixture, variant, and settings combination. Reported structures: sealed class, inheritance, custom serializer/adapter, `init(from:)`, property wrapper, enum associated value, computed/delegated property, syntax error, unresolved type.
 
-## Milestone 2: Mock calistirma ve yerel UI (MVP)
+## Milestone 2: Mock runtime and local UI (MVP)
 
-### Isler
+### Tasks
 
-- `serve` komutu: aktif collection'lari tek port uzerinde Mockoon motoruyla calistirir.
-- Cakisma ve golgeleme kontrolu; eslesmeyen istekler icin 404 JSON'u.
-- Control API (loopback, token, Host/Origin kontrolu).
-- Yerel web UI: project/collection/endpoint yonetimi, senaryo duzenleme ve secimi, latency, status/header/body editoru, modelden uretim ekrani, start/stop, loglar.
-- Dosya katmani: atomik yazma, dosya izleme, dis degisiklik algilama.
-- CORS ayarlari; log maskeleme.
-- Android/iOS debug ag yapilandirma snippet'leri ve baglanti rehberi (`10.0.2.2`, `localhost`, `adb reverse`).
+- `serve` command: run active collections on a single port with the Mockoon engine.
+- Conflict and shadowing checks; JSON 404 for unmatched requests.
+- Control API (loopback, token, Host/Origin checks).
+- Local web UI: project/collection/endpoint management, scenario editing and selection, latency, status/header/body editor, model generation screen, start/stop, logs.
+- File layer: atomic writes, file watching, external change detection.
+- CORS settings; log masking.
+- Android/iOS debug network configuration snippets and connection guide (`10.0.2.2`, `localhost`, `adb reverse`).
 
-### Cikis kriterleri
+### Exit criteria
 
-- PRODUCT_REQUIREMENTS'taki MVP kabul kriterleri karsilaniyor.
-- Ayni dosya Mockoon desktop ve Mockoon CLI ile de calisiyor.
+- MVP acceptance criteria in PRODUCT_REQUIREMENTS are met.
+- The same file also works with Mockoon desktop and Mockoon CLI.
 
-### Sonuc
+### Result
 
-Dogrulandi: `test/project.test.ts` (20), `test/control-api.test.ts` (12), `test/cli.test.ts` (8), `test/safe-mode.test.ts` (4), `test/ui-util.test.ts` (5).
+Verified: `test/project.test.ts` (20), `test/control-api.test.ts` (12), `test/cli.test.ts` (8), `test/safe-mode.test.ts` (4), `test/ui-util.test.ts` (5).
 
-- `serve`, cakisma (`duplicate` hata, `shadowed` uyari) ve golgeleme kontrolu, eslesmeyen istek icin JSON 404 ve log isareti, CORS preflight ve origin yansitma, atomik yazma, dosya izleme, dis degisiklikte yeniden yukleme, eski dosya uzerine yazmayi reddetme (`STALE`), bozuk JSON'un kaydedilmemesi, log maskeleme ve body loglamanin kapali olmasi, port cakismasi mesaji.
-- Control API: yalnizca `127.0.0.1`, token (TTL 8 saat), Host ve Origin kontrolu, CORS yok, path traversal ve symlink reddi.
-- Yerel UI (React): collection/endpoint/senaryo yonetimi, JSON dogrulama, modelden uretim dialogu, baslat/durdur, istek loglari, baglanti rehberi, ayarlar. Tarayicida elle denendi (collection olusturma, modelden body uretme, sunucuyu baslatma, istek listesi).
-- Mockoon CLI 9.10.0 ayni environment dosyasini calistirir (otomatik uyumluluk testi).
-- **Elle dogrulama (bu makinede):** Android Emulator (Pixel_8a AVD) `10.0.2.2:<port>` ve `adb reverse` + `localhost` ile mock'tan dogru response aldi; iOS Simulator (iPhone 17) `localhost:<port>` ile dogru response aldi. Bu denemeler agi dogrular; uygulama icindeki cleartext/ATS ayarlari (`network_security_config`, `NSAllowsLocalNetworking`) bir uygulama projesi olmadan denenmedi.
-- **Acik:** Mockoon desktop ile acma ve duzenleme, fiziksel Android/iOS cihaz, WebView icinde CORS, Windows ve Linux.
+- `serve`, conflict (`duplicate` error, `shadowed` warning) and shadowing checks, JSON 404 and log marker for unmatched requests, CORS preflight and origin reflection, atomic writes, file watching, reload on external changes, refusal to overwrite stale files (`STALE`), refusing to save malformed JSON, log masking and body logging disabled, port conflict message.
+- Control API: `127.0.0.1` only, token (TTL 8 hours), Host and Origin checks, no CORS, path traversal and symlink rejection.
+- Local UI (React): collection/endpoint/scenario management, JSON validation, model generation dialog, start/stop, request logs, connection guide, settings. Manually tried in a browser (creating a collection, generating a body from a model, starting the server, request list).
+- Mockoon CLI 9.10.0 runs the same environment file (automated compatibility test).
+- **Manual verification (on this machine):** Android Emulator (Pixel_8a AVD) received the correct response from the mock using `10.0.2.2:<port>` and `adb reverse` + `localhost`; iOS Simulator (iPhone 17) received the correct response using `localhost:<port>`. These checks verify networking; app-level cleartext/ATS settings (`network_security_config`, `NSAllowsLocalNetworking`) were not tested without an application project.
+- **Open:** Opening and editing with Mockoon desktop, physical Android/iOS devices, CORS inside a WebView, Windows, and Linux.
 
-Milestone 1 ve 2 tamamlandiginda **offline MVP** hazirdir.
+When Milestones 1 and 2 are complete, the **offline MVP** is ready.
 
 ## Milestone 3: MCP server
 
-### Isler
+### Tasks
 
-- Stdio MCP server: model parse, schema getirme, body dogrulama, endpoint/senaryo kaydetme, collection listeleme.
-- Project klasoru disina erisimi engelleme; gecersiz body'yi reddetme.
-- Kiro ve Copilot icin kurulum ornekleri.
+- Stdio MCP server: model parsing, schema retrieval, body validation, saving endpoints/scenarios, listing collections.
+- Prevent access outside the project directory; reject invalid bodies.
+- Setup examples for Kiro and Copilot.
 
-### Cikis kriterleri
+### Exit criteria
 
-- Kiro veya Copilot chat'inden "bu modelle ... uret" akisi, dogrulanmis bir senaryo olarak dosyaya kaydediliyor.
-- MCP olmadan tum MVP akislari aynen calisiyor.
+- The flow "generate ... with this model" from Kiro or Copilot chat is saved to the file as a validated scenario.
+- All MVP flows work exactly as before without MCP.
 
-### Sonuc
+### Result
 
-Dogrulandi (`test/mcp.test.ts`, 7 test; gercek stdio MCP istemcisi ile): alti dar tool (`list_collections`, `parse_model`, `get_schema`, `generate_sample`, `validate_body`, `save_scenario`); shell veya keyfi dosya tool'u yok. "Bu modelle uret" akisi `parse_model` -> `get_schema` -> `save_scenario` ile dogrulanmis senaryo olarak dosyaya yaziliyor; gecersiz JSON veya modele uymayan body hicbir sey kaydetmeden reddediliyor; root disina erisim (`..`, mutlak yol, symlink) reddediliyor. MCP kullanmayan tum akislar ayni testlerle MCP'siz calisiyor.
+Verified (`test/mcp.test.ts`, 7 tests; with a real stdio MCP client): six narrow tools (`list_collections`, `parse_model`, `get_schema`, `generate_sample`, `validate_body`, `save_scenario`); no shell or arbitrary file tool. The "generate with this model" flow writes a validated scenario to the file via `parse_model` -> `get_schema` -> `save_scenario`; invalid JSON or a body that does not match the model is rejected without saving anything; access outside the root (`..`, absolute path, symlink) is rejected. All flows that do not use MCP work without MCP under the same tests.
 
-Kurulum ornekleri: [Gelistirme rehberi](DEVELOPMENT.md#mcp-kurulumu-kiro-ve-copilot).
+Setup examples: [Development guide](DEVELOPMENT.md#mcp-setup-kiro-and-copilot).
 
-**Acik:** Akis gercek Kiro veya Copilot chat'i ile denenmedi; protokol seviyesinde SDK istemcisiyle dogrulandi.
+**Open:** The flow was not tried with real Kiro or Copilot chat; it was verified at the protocol level with the SDK client.
 
-## Milestone 4: Istege bagli AI CLI (UI icinden)
+## Milestone 4: Optional AI CLI (from the UI)
 
-### Isler
+### Tasks
 
-- Provider interface'i ve M0/M3 deneyimine gore secilen tek CLI entegrasyonu.
-- Gonderilecek source/schema/prompt onizlemesi ve acik onay.
-- Agent yetkilerini kapatan/daraltan, gecici dizinde calisan guvenli process baslatma.
-- Cikti dogrulama; basarisizlikta yerel ureticiye donus.
+- Provider interface and a single CLI integration selected based on M0/M3 experience.
+- Preview of source/schema/prompt to be sent and explicit approval.
+- Secure process launch in a temporary directory, with agent permissions disabled/restricted.
+- Validate output; fall back to the local generator on failure.
 
-### Cikis kriterleri
+### Exit criteria
 
-- Onaysiz hicbir veri CLI'a gitmiyor.
-- CLI yokken, auth hatasinda veya timeout'ta uygulama yerel uretimle devam ediyor.
+- No data is sent to the CLI without approval.
+- If the CLI is missing, authentication fails, or times out, the app continues with local generation.
 
-### Sonuc
+### Result
 
-Secilen entegrasyon: **GitHub Copilot CLI** (ekip Kiro/Copilot kullaniyor ve CLI hem `-p` ile etkilesimsiz calisiyor hem arac/izin filtreleri sunuyor). Provider interface'i (`AiProvider`) baska bir CLI eklemeye aciktir.
+Selected integration: **GitHub Copilot CLI** (the team uses Kiro/Copilot, and the CLI supports both non-interactive operation with `-p` and tool/permission filters). The provider interface (`AiProvider`) allows adding another CLI.
 
-Dogrulandi (`test/ai.test.ts`, 14 test; sahte CLI executable'lariyla): onizleme hicbir process baslatmaz; onay yalnizca onizlenen promptun hash'i ile verilir (prompt degisirse `FORBIDDEN`); basarili cikti, code fence icinde cikti, bozuk JSON, modele uymayan JSON, sifir olmayan cikis kodu, CLI bulunamadi, timeout (process olur) ve iptal (process olur) durumlari; son bes durumda yerel uretici devreye girer. Prompt tek bir argv elemanidir (shell yok), process bos gecici klasorde ve izin listeli ortam degiskenleriyle baslar, `--config-dir` bos gecici klasordur (kullanicinin MCP sunuculari, hook'lari ve eklentileri yuklenmez), arac listesi bosaltilir, `shell` ve `write` reddedilir. AI yalnizca `ui --ai copilot` ile acilir; proje dosyasinda saklanmaz.
+Verified (`test/ai.test.ts`, 14 tests; using fake CLI executables): preview starts no process; approval is given only for the hash of the previewed prompt (`FORBIDDEN` if the prompt changes); successful output, output in a code fence, malformed JSON, JSON that does not match the model, nonzero exit code, CLI not found, timeout (process terminated), and cancellation (process terminated) cases; local generation is used in the last five cases. The prompt is a single argv element (no shell); the process starts in an empty temporary directory with an allowlisted environment; `--config-dir` is an empty temporary directory (the user's MCP servers, hooks, and extensions are not loaded); the tool list is emptied; `shell` and `write` are denied. AI is enabled only with `ui --ai copilot`; it is not stored in the project file.
 
-Gercek Copilot CLI 1.0.27 ile tek bir sentetik model uzerinde elle denendi: ~12 sn'de gecerli yanit geldi ve semaya uydu. Ilk denemelerde CLI, kullanicinin normal Copilot yapilandirmasiyla (cok sayida MCP sunucusu tanimli) 25-90 sn boyunca hic yanit vermedi, bos bir `--config-dir` ile ise yanit verdi; bu yuzden izole `--config-dir` kullaniliyor (neden-sonuc iliskisi MCP sunucularina kesin olarak baglanmadi). Giris bilgisi bos yapilandirma klasorunde de gecerli kaldi (muhtemelen sistem anahtarligi); anahtarlik kullanmayan bir kurulumda CLI giris hatasi verir ve arac yerel uretime duser.
+Manually tried with the real Copilot CLI 1.0.27 on one synthetic model: a valid response arrived in ~12 seconds and matched the schema. In initial attempts, the CLI produced no response for 25-90 seconds with the user's regular Copilot configuration (many MCP servers configured), but did respond with an empty `--config-dir`; therefore an isolated `--config-dir` is used (the cause-and-effect relationship was not conclusively attributed to MCP servers). Authentication also remained valid with an empty configuration directory (probably through the system keychain); on an installation that does not use a keychain, the CLI will fail authentication and the tool will fall back to local generation.
 
-## Milestone 5: Ileri senaryolar ve dagitim
+## Milestone 5: Advanced scenarios and distribution
 
-Degerlendirilecekler (her biri icin kabul kriteri ayri yazilir):
+Items to evaluate (write separate acceptance criteria for each):
 
-| Madde | Karar | Kabul kriteri | Durum |
+| Item | Decision | Acceptance criteria | Status |
 |---|---|---|---|
-| Proxy / fallback UI | Yapildi | Varsayilan kapali; acikken yalniz eslesmeyen istekler girilen backend'e gider, eslesen mock kazanir; log'da `proxied` gorunur; backend adresi `http(s)` olmali, kimlik bilgisi icermemeli ve mock sunucunun kendisini gostermemeli. | Dogrulandi (`test/m5.test.ts`) |
-| iOS fiziksel cihaz icin LAN binding UI'i | Yapildi | Ayarlarda acik onayli LAN secenegi (`0.0.0.0`), acikken UI ve `serve` uyari verir; baglanti rehberi LAN IP'sini gosterir; varsayilan `127.0.0.1`. | Dogrulandi (`test/project.test.ts`, `test/cli.test.ts`); fiziksel cihaz denenmedi |
-| Model degistiginde schema diff'i | Yapildi | Bagli modelin kaynak dosyalari yeniden okunur; eklenen/silinen/tipi degisen alan, zorunlu alan ve enum degisiklikleri bozucu veya uyumlu diye listelenir; kayitli body'ler yeni semaya karsi dogrulanir; `mock-studio check` bozulma varsa 1 ile cikar. | Dogrulandi (`test/m5.test.ts`) |
-| Uretilen semadan OpenAPI export | Yapildi | OpenAPI 3.1; path parametreleri `{id}`, status kodlari senaryolardan, 2xx response'lar bagli model semasiyla ve ornek body'lerle; ayni adli farkli tipler ayrisir; pasif collection'lar varsayilan olarak disarida. Backend ekibine sozlesme onerisidir. | Dogrulandi (`test/m5.test.ts`); harici bir OpenAPI validator ile denenmedi |
-| Request'e gore response kurallari icin UI | Ertelendi; M7'ye tasindi (2026-11-08) | Kurallar dosyada korunur ve calisir; duzenleme icin ayni dosya Mockoon desktop ile acilir. UI yapilirsa: kural (target/modifier/value/operator) ekleme-silme-siralama, kaydetmeden once dogrulama ve desktop ile ayni dosyada gidis-donus. | Acik |
-| Sealed class / polymorphism, kalitim | Ertelendi | Ilk surumde desteklenmeyip acikca raporlanir (`sealed-class`, `inheritance`). Yapilirsa: sealed alt tiplerinden `oneOf` sema, `type` discriminator ayari ve her alt tip icin uretim varyanti. Moshi M0'da kapsama alindi. | Acik |
-| Tek binary veya Docker dagitimi | Tek binary M6 prototipi ve M13'e tasindi; Docker 2026-11-08'de kapsamdan cikarildi | Bu makinede Docker yok ve Node SEA ile WASM/UI asset paketleme denenmedi. Kabul kriteri: temiz makinede `docker run` ile `serve`/`ui` calismasi ve imajda yalniz production bagimliliklari. | Acik |
+| Proxy / fallback UI | Done | Disabled by default; when enabled, only unmatched requests go to the specified backend, while a matching mock takes precedence; `proxied` appears in the log; backend address must be `http(s)`, contain no credentials, and must not point to the mock server itself. | Verified (`test/m5.test.ts`) |
+| LAN binding UI for physical iOS devices | Done | Explicitly approved LAN option (`0.0.0.0`) in settings; UI and `serve` warn when enabled; connection guide shows the LAN IP; default is `127.0.0.1`. | Verified (`test/project.test.ts`, `test/cli.test.ts`); physical device not tested |
+| Schema diff when the model changes | Done | Reload the linked model's source files; list added/deleted/type-changed fields, required-field and enum changes as breaking or compatible; validate saved bodies against the new schema; `mock-studio check` exits with 1 if there are breaking changes. | Verified (`test/m5.test.ts`) |
+| OpenAPI export from generated schemas | Done | OpenAPI 3.1; path parameters use `{id}`, status codes come from scenarios, 2xx responses use the linked model schema and example bodies; same-named types with different shapes are disambiguated; inactive collections are excluded by default. This is a contract proposal for the backend team. | Verified (`test/m5.test.ts`); not tried with an external OpenAPI validator |
+| UI for request-based response rules | Deferred; moved to M7 (2026-11-08) | Rules are preserved in the file and work; edit by opening the same file in Mockoon desktop. If a UI is built: add/remove/reorder rules (target/modifier/value/operator), validate before saving, and round-trip with desktop using the same file. | Open |
+| Sealed class / polymorphism, inheritance | Deferred | Explicitly reported as unsupported in the first version (`sealed-class`, `inheritance`). If implemented: `oneOf` schema from sealed subtypes, configurable `type` discriminator, and a generation variant for each subtype. Included in scope for Moshi in M0. | Open |
+| Single binary or Docker distribution | Single-binary M6 prototype moved to M13; Docker removed from scope on 2026-11-08 | Docker is not installed on this machine, and Node SEA packaging of WASM/UI assets has not been tried. Acceptance criteria: `serve`/`ui` run with `docker run` on a clean machine, and the image contains only production dependencies. | Open |
 
-## v1 plani (M6-M17)
+## v1 plan (M6-M17)
 
-Kaynak: kullanici kararlari, 2026-11-08 (bkz. [Devir raporu - Bolum 8](HANDOFF.md#8-kullanicidan-karar-bekleyen-konular)). Tasarim ayrintilari: [Mimari - v1 tasarimlari](ARCHITECTURE.md#v1-tasarimlari-oneri). Bu bolumdeki milestone'larin hicbiri henuz uygulanmadi; durum "Planlandi"dir.
+Source: user decisions, 2026-11-08 (see [Handoff - Section 8](HANDOFF.md#8-decisions-pending-from-the-user)). Design details: [Architecture - v1 designs](ARCHITECTURE.md#v1-designs-proposal). None of the milestones in this section have been implemented yet; their status is "Planned".
 
-Urunun v1 hedefi:
+The v1 product goals:
 
-1. **Gelistirme sirasinda LLM'ler MCP ile araci otomatik kullanir:** endpoint, senaryo, kosul ve test profili olusturur; modeli okur, response uretir, model degisince mock'u gunceller.
-2. **Test sirasinda gelistirici dashboard'u kullanir:** header, parametre, body veya istek sirasina gore farkli response (status, body, header, gecikme) donerek uygulamanin bu durumlardaki davranisini gorur.
-3. **Son kullanici urunu:** Node dahil kurulum ve guncelleme tek komutla yapilir; proje GitHub'da acik kaynak (MIT) yayinlanir.
+1. **During development, LLMs use the tool automatically through MCP:** create endpoints, scenarios, conditions, and test profiles; read the model, generate responses, and update mocks when the model changes.
+2. **During testing, developers use the dashboard:** see how the app behaves in different situations by returning different responses (status, body, header, delay) based on headers, parameters, body, or request order.
+3. **End-user product:** installation and updates, including Node, take one command; the project is published as open source (MIT) on GitHub.
 
-Ilke: Her yeni ozellik core'da yazilir ve ayni milestone icinde **CLI, MCP ve UI** uzerinden kullanilabilir hale gelir (ozellik paritesi). MCP'de olmayan bir ozellik "bitti" sayilmaz.
+Principle: Every new feature is implemented in core and made available through **CLI, MCP, and UI** in the same milestone (feature parity). A feature is not considered "done" until it is available through MCP.
 
-### Milestone 6: Acik kaynak hazirligi ve temel saglamlastirma
+### Milestone 6: Open-source readiness and foundational hardening
 
-- Projeyi git deposuna cevir; ilk commit'ten once firma/musteri referanslarini temizle (`docs/HANDOFF.md` icindeki referans uygulama yollari dahil).
-- `test/ai.test.ts` icindeki zamanlama kararsizligini duzelt (kayit dosyasini bekle, `call` tanimli oldugunu assert et).
-- CI matrisine `windows-latest` ekle; CI'i ilk kez calistir.
-- `CONTRIBUTING.md`, `SECURITY.md`, issue/PR sablonlari, `CHANGELOG.md`.
-- Tum dokumanlar Ingilizceye cevrilir (kullanici karari, 2026-11-08); kod ve UI metinleri zaten Ingilizce.
-- **Isim kontrolu:** "Mock API Studio" adinin GitHub, npm ve Homebrew'da cakismasi ve ayirt ediciligi kontrol edilir; gerekirse yeni ad kullaniciya onerilir.
-- **Tek binary prototipi (Node SEA):** `serve`, `ui`, `mcp` ve parser child process'i (WASM) ile UI asset'leri tek calistirilabilir dosyada calisiyor mu? Sonuc M13 dagitim tasarimini belirler.
-- **Bagimlilik notu:** README'de `npm audit` uyarilarinin (Mockoon uzerinden gelen faker/joi) guvenli modla nasil kapatildigi aciklanir; periyodik bagimlilik guncelleme adimi DEVELOPMENT rehberine eklenir.
-- **UI E2E testleri:** Playwright ile dashboard'un temel akislari (collection/endpoint/senaryo olusturma, sunucu baslatma, log) icin ilk testler; sonraki milestone'lar UI degisikliklerini bu testlerle korur.
+- Turn the project into a git repository; remove company/customer references before the first commit (including reference application paths in `docs/HANDOFF.md`).
+- Fix timing flakiness in `test/ai.test.ts` (wait for the recording file; assert that `call` is defined).
+- Add `windows-latest` to the CI matrix; run CI for the first time.
+- `CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates, `CHANGELOG.md`.
+- Translate all documentation into English (user decision, 2026-11-08); code and UI text are already in English.
+- **Name check:** Check the "Mock API Studio" name for conflicts and distinctiveness on GitHub, npm, and Homebrew; suggest a new name to the user if needed.
+- **Single-binary prototype (Node SEA):** Can `serve`, `ui`, `mcp`, and the parser child process (WASM) run with UI assets in a single executable? The result determines the M13 distribution design.
+- **Dependency note:** Explain in the README how `npm audit` warnings (faker/joi pulled in through Mockoon) are mitigated by safe mode; add a periodic dependency update step to the DEVELOPMENT guide.
+- **UI E2E tests:** Initial Playwright tests for core dashboard flows (create collection/endpoint/scenario, start server, logs); later milestones protect UI changes with these tests.
 
-**Cikis kriterleri:** CI macOS, Linux ve Windows'ta Node 22/24 ile yesil (GitHub deposu acilinca); tam test paketi art arda 5 calistirmada kararli; depoda firma referansi yok; SEA prototipinin sonucu (calisiyor/calismiyor ve nedenleri) kayitli; isim karari verilmis.
+**Exit criteria:** CI is green on macOS, Linux, and Windows with Node 22/24 (once the GitHub repository is opened); the full test suite is stable across 5 consecutive runs; no company references remain in the repository; the SEA prototype result (works/does not work and why) is recorded; a name decision is made.
 
-### Milestone 7: Kosullu response'lar (kural motoru)
+### Milestone 7: Conditional responses (rule engine)
 
-Ilk adim (2026-11-08 duzeltmesi): **mevcut ozelliklerin MCP eksikleri kapatilir**: endpoint olusturma/guncelleme/silme, senaryo guncelleme/silme/aktif etme, collection olusturma/aktif etme, sunucu baslat/durdur/durum ve son istek loglari. Ana kullanim LLM'lerin MCP ile calismasi oldugu icin bu, M10'u beklemez.
+First step (2026-11-08 correction): **close MCP gaps in existing features**: create/update/delete endpoints, update/delete/activate scenarios, create/activate collections, start/stop/check server status, and recent request logs. Since the primary use is LLMs working through MCP, this does not wait for M10.
 
-Mockoon'un dosyada zaten calisan response kurallari domain modeline, UI'a, CLI'a ve MCP'ye acilir. Tasarim: [Kosullu response'lar](ARCHITECTURE.md#kosullu-responselar).
+Expose Mockoon's response rules, which already work in the file, through the domain model, UI, CLI, and MCP. Design: [Conditional responses](ARCHITECTURE.md#conditional-responses).
 
-- Domain modeli: senaryoya `rules` ve `rulesOperator` (AND/OR), endpoint'e `responseMode` (kurallar / sabit / sirali / rastgele).
-- Kosul hedefleri: header, query, route parametresi, body (JSON path veya form alani), cookie, istek sirasi (`request_number`). Operatorler: esittir, regex (buyuk/kucuk harf duyarli ve duyarsiz), bos/yok, dizi icerir, bos dizi; her kosul tersine cevrilebilir.
-- Zorla secim: `X-Mock-Scenario: <senaryo adi>` header'i (proje ayariyla acilip kapanir; varsayilan acik) diger kurallardan once gelir. Uygulamanin debug menusunden senaryo secmek icin kullanilir.
-- UI: senaryo listesinde kural editoru, surukle-birak siralama (ilk eslesen kazanir), "varsayilan" isareti, kural dogrulama.
-- Log ve inceleme: her istek icin hangi senaryonun neden secildigi ("neden bu response") gosterilir. Once motorun raporladigi bilgi (response uuid, olaylar) kullanilir; eslesen kural motordan alinamiyorsa kurallarin core'da yeniden degerlendirilmesi yalniz gosterim icindir ve motorla farki uyari olarak loglanir.
-- Yan dosya `schemaVersion: 2`: kurallar environment dosyasinda, endpoint modu/profil/degisken gibi arac verisi yan dosyada; v1 dosyalari otomatik ve kayipsiz yukseltilir (migration testi), v2 dosyasi eski surumde acik hatayla reddedilir.
-- MCP/CLI: kural ekleme/silme/siralama ve endpoint modu.
+- Domain model: `rules` and `rulesOperator` (AND/OR) on a scenario; `responseMode` (rules / fixed / sequential / random) on an endpoint.
+- Condition targets: header, query, route parameter, body (JSON path or form field), cookie, request order (`request_number`). Operators: equals, regex (case-sensitive and insensitive), empty/missing, array contains, empty array; each condition can be negated.
+- Forced selection: the `X-Mock-Scenario: <scenario name>` header (enabled/disabled by project setting; enabled by default) takes precedence over other rules. Used to select a scenario from the app's debug menu.
+- UI: rule editor in the scenario list, drag-and-drop ordering (first match wins), "default" marker, rule validation.
+- Logging and inspection: show which scenario was selected for each request and why ("why this response"). First use information reported by the engine (response uuid, events); if the matched rule cannot be retrieved from the engine, reevaluate the rules in core for display only and log a warning about the difference from the engine.
+- Sidecar `schemaVersion: 2`: rules are in the environment file; tool data such as endpoint mode/profile/variables is in the sidecar; v1 files are automatically upgraded without loss (migration test), and v2 files are rejected with a clear error by older versions.
+- MCP/CLI: add/remove/reorder rules and endpoint mode.
 
-**Cikis kriterleri:** Ayni endpoint'te header, query, route parametresi ve body kosuluna gore farkli status/body donuyor; kural eslesmezse varsayilan senaryo donuyor; `X-Mock-Scenario` her kurali ezer; sirali modda 1. istek 500, 2. istek 200 donuyor; kurallar restartsiz yansiyor; dosya Mockoon CLI ile ayni davranisi veriyor; hepsi entegrasyon testleriyle dogrulaniyor.
+**Exit criteria:** The same endpoint returns different status/body based on header, query, route parameter, and body conditions; the default scenario is returned when no rule matches; `X-Mock-Scenario` overrides every rule; sequential mode returns 500 on request 1 and 200 on request 2; rules apply without restart; the file behaves the same with Mockoon CLI; all are verified with integration tests.
 
-### Milestone 8: Test profilleri ve ag kosullari
+### Milestone 8: Test profiles and network conditions
 
-- **Test profili:** Bircok endpoint'in senaryosunu tek tikla degistiren adlandirilmis secim ("Oturum dustu: her yer 401", "Sunucu hatasi", "Bos liste", "Yavas ag"). Yan dosyada saklanir ve git ile paylasilir; aktif profil dashboard'da ve `serve --profile` ile secilir.
-- **Ag kosullari (global veya profil bazinda):** sabit gecikme ve zaman asimi simulasyonu (cok uzun gecikme). Rastgele hata orani ve gecikme jitter'i 2026-11-08'de kapsamdan cikarildi: motor desteklemiyor ve test sonuclarini tekrarlanamaz yapiyor; ayni ihtiyac sirali mod, `X-Mock-Scenario` ve profillerle deterministik karsilanir.
-- Istek sayaci sifirlama (sirali mod ve `request_number` kurallari icin).
+- **Test profile:** A named selection that changes scenarios for many endpoints with one click ("Session expired: 401 everywhere", "Server error", "Empty list", "Slow network"). Stored in the sidecar and shared through git; select the active profile in the dashboard or with `serve --profile`.
+- **Network conditions (global or per profile):** Fixed delay and timeout simulation (very long delay). Random error rate and delay jitter were removed from scope on 2026-11-08: the engine does not support them, and they make test results non-repeatable; the same need is met deterministically with sequential mode, `X-Mock-Scenario`, and profiles.
+- Reset request counter (for sequential mode and `request_number` rules).
 
-**Cikis kriterleri:** Profil degisikligi restartsiz uygulanir; profil silinince senaryolar eski haline doner; global gecikme ve zaman asimi entegrasyon testleriyle dogrulanir.
+**Exit criteria:** Profile changes apply without restart; deleting a profile restores the previous scenarios; global delay and timeout are verified with integration tests.
 
-### Milestone 9: Model degisince mock'u guncelleme
+### Milestone 9: Update mocks when the model changes
 
-Mevcut `check` yalniz farki gosteriyor; body'leri guncellemek kullaniciya kaliyor. Tasarim: [Model guncelleme](ARCHITECTURE.md#model-degisikliginde-body-guncelleme).
+Current `check` only shows the diff; updating bodies is left to the user. Design: [Updating bodies when the model changes](ARCHITECTURE.md#updating-bodies-when-the-model-changes).
 
-- Her bagli senaryo icin **birlestirme onerisi:** var olan degerler korunur, yeni alanlar yerel ureticiyle doldurulur, silinen alanlar kaldirilir, tipi degisen alan yeniden uretilir, enum disi deger gecerli bir degerle degistirilir.
-- Senaryo bazinda fark onizlemesi ve onay; "tumunu uygula".
-- CLI: `mock-studio check --fix` (onizleme), `--fix --yes` (uygula). MCP: `check_models`, `apply_model_update`. UI: model degisikligi bildirimi ve tek tikla guncelleme.
-- Kaynak dosya izlenir; model degisirse dashboard uyari gosterir.
+- **Merge suggestion** for each linked scenario: preserve existing values, fill new fields with the local generator, remove deleted fields, regenerate fields whose types changed, and replace values outside an enum with a valid value.
+- Per-scenario diff preview and approval; "apply all".
+- CLI: `mock-studio check --fix` (preview), `--fix --yes` (apply). MCP: `check_models`, `apply_model_update`. UI: model-change notification and one-click update.
+- Watch source files; show a warning on the dashboard when a model changes.
 
-**Cikis kriterleri:** Alan ekleme/silme/tip degisikligi/enum degisikligi/nullable degisikligi fixture'larinda guncellenen body yeni semaya gore gecerli ve elle girilmis degerler korunuyor; 4xx/5xx senaryolarina dokunulmuyor.
+**Exit criteria:** For fixtures with added/deleted/type-changed/enum-changed/nullable-changed fields, the updated body is valid against the new schema and manually entered values are preserved; 4xx/5xx scenarios are untouched.
 
-### Milestone 10: MCP ile tam otomatik kullanim
+### Milestone 10: Fully automated use through MCP
 
-- Eksik tool'lar: endpoint olusturma/guncelleme/silme, senaryo guncelleme/silme/aktif etme, kural ve endpoint modu, test profilleri, collection olusturma/aktif etme, sunucu baslat/durdur/durum, son istek loglari, model kontrolu ve guncelleme, import/export.
-- Tool'lar dar kalir: shell yok, keyfi dosya okuma/yazma yok, `--root` siniri korunur. Yikici tool'lar (silme, toplu guncelleme) once onizleme dondurur.
-- MCP resource/prompt'lari: projeye ozel kullanim rehberi ("bu modelle endpoint olustur ve 401/500/bos liste senaryolarini ekle").
-- `mock-studio mcp install <istemci>`: istemcinin kendi resmi komutu varsa onu calistirir (or. `claude mcp add`, `codex mcp add`; kullanici onayiyla); yoksa (Copilot, Kiro, Gemini) yapistirilacak yapilandirma parcasini gosterir. Istemcilerin yapilandirma dosyalari dogrudan duzenlenmez.
+- Missing tools: create/update/delete endpoints; update/delete/activate scenarios; rules and endpoint mode; test profiles; create/activate collections; start/stop/check server status; recent request logs; model check and update; import/export.
+- Keep tools narrow: no shell, no arbitrary file reads/writes, preserve the `--root` boundary. Destructive tools (delete, bulk update) return a preview first.
+- MCP resources/prompts: project-specific usage guide ("create an endpoint with this model and add 401/500/empty-list scenarios").
+- `mock-studio mcp install <client>`: run the client's own official command if it has one (e.g. `claude mcp add`, `codex mcp add`; with user approval); otherwise (Copilot, Kiro, Gemini), show a configuration snippet to paste. Do not directly edit clients' configuration files.
 
-**Cikis kriterleri:** Gercek bir LLM istemcisiyle (en az Claude Code ve bir digeri) "bu modelle endpoint olustur, 3 senaryo ve header kosulu ekle, sunucuyu baslat" akisi elle dogrulanir; tum tool'lar SDK istemcisiyle otomatik test edilir.
+**Exit criteria:** Manually verify the flow "create an endpoint with this model, add 3 scenarios and a header condition, start the server" with a real LLM client (at least Claude Code and one other); automatically test all tools with the SDK client.
 
-### Milestone 11: Coklu AI CLI provider'i
+### Milestone 11: Multiple AI CLI providers
 
-- Makinede kurulu CLI'lar otomatik bulunur (`PATH` taramasi; calistirmadan once yalniz `--version`): Claude Code (`claude`), Codex (`codex`), GitHub Copilot CLI (`copilot`), Gemini CLI (`gemini`), Kiro CLI (`kiro-cli`).
-- Her provider icin etkilesimsiz calistirma, izole yapilandirma, arac/izin kapatma ve cikti ayiklama ayri yazilir ve sahte CLI ile test edilir. Bir provider'in izolasyonu saglanamiyorsa provider "sinirli" isaretlenir ve kullaniciya gosterilir.
-- UI ve CLI'da provider secimi (`--ai auto|claude|codex|copilot|gemini|kiro`); onizleme + hash'li onay kurali tum provider'lar icin aynen gecerli.
+- Automatically detect installed CLIs on the machine (scan `PATH`; only `--version` before running): Claude Code (`claude`), Codex (`codex`), GitHub Copilot CLI (`copilot`), Gemini CLI (`gemini`), Kiro CLI (`kiro-cli`).
+- Implement non-interactive operation, isolated configuration, disabling tools/permissions, and output extraction separately for each provider; test with fake CLIs. If a provider cannot be isolated, mark it "limited" and show this to the user.
+- Provider selection in UI and CLI (`--ai auto|claude|codex|copilot|gemini|kiro`); preview + hash-based approval rule applies identically to all providers.
 
-**Cikis kriterleri:** Kurulu her provider ile tek sentetik modelde elle uretim; CLI yokken, giris hatasinda, timeout'ta yerel uretime donus otomatik testle dogrulanir.
+**Exit criteria:** Manually generate with each installed provider using one synthetic model; automatically verify fallback to local generation when a CLI is missing, authentication fails, or times out.
 
-### Milestone 12: Import / export ve kayit modu
+### Milestone 12: Import / export and recording mode
 
-Tasarim: [Import ve export](ARCHITECTURE.md#import-ve-export).
+Design: [Import and export](ARCHITECTURE.md#import-and-export).
 
-- **Kendi paket formatimiz** (`*.mockstudio.json`): bir veya birden fazla collection; endpoint, senaryo, kural, model baglantisi ve sema. Import'ta onizleme ve cakisma cozumu (atla / yeniden adlandir / ustune yaz).
-- **Import:** Postman Collection v2.1 (kayitli ornek response'lar senaryo olur), OpenAPI 3.x (ornekler veya semadan uretim), HAR (Charles/Proxyman/tarayici kaydindan), cURL.
-- **Export:** kendi paket formatimiz, Postman Collection v2.1 (mock adresine istekler), OpenAPI 3.1 (mevcut).
-- **Kayit modu** (kullanici onayi, 2026-11-08): proxy acikken eslesmeyen isteklerin gercek backend yanitlari, kullanicinin sectigi endpoint'ler icin senaryo olarak kaydedilir; kaydetmeden once onizleme, hassas header'lar (Authorization, Cookie, Set-Cookie) atilir ve body'deki token benzeri alanlar uyarilir.
-- Import edilen icerik veri olarak ele alinir: guvenli mod ve boyut sinirlari gecerli.
+- **Our own package format** (`*.mockstudio.json`): one or more collections; endpoint, scenario, rule, model link, and schema. Preview and conflict resolution on import (skip / rename / overwrite).
+- **Import:** Postman Collection v2.1 (saved example responses become scenarios), OpenAPI 3.x (generate from examples or schema), HAR (from Charles/Proxyman/browser capture), cURL.
+- **Export:** our own package format, Postman Collection v2.1 (requests to the mock address), OpenAPI 3.1 (existing).
+- **Recording mode** (user approval, 2026-11-08): while the proxy is enabled, save real backend responses for unmatched requests as scenarios for endpoints selected by the user; preview before saving, omit sensitive headers (Authorization, Cookie, Set-Cookie), and warn about token-like fields in the body.
+- Treat imported content as data: safe mode and size limits apply.
 
-**Cikis kriterleri:** Gidis-donus testi (export -> import ayni projeyi uretir); her import bicimi icin sentetik fixture testi; bozuk dosya hicbir sey yazmadan reddedilir; kayit modu yerel sahte backend ile test edilir ve hassas header'lar dosyaya yazilmaz.
+**Exit criteria:** Round-trip test (export -> import produces the same project); synthetic fixture test for every import format; malformed files are rejected without writing anything; recording mode is tested with a local fake backend and sensitive headers are not written to the file.
 
-### Milestone 13: Son kullanici dagitimi ve guncelleme
+### Milestone 13: End-user distribution and updates
 
-Tasarim: [Dagitim ve guncelleme](ARCHITECTURE.md#dagitim-ve-guncelleme).
+Design: [Distribution and updates](ARCHITECTURE.md#distribution-and-updates).
 
-- **Birincil yol: tek binary** (M6 SEA prototipi basariliysa): macOS (arm64/x64), Linux (x64/arm64) ve Windows (x64) icin Node gomulu calistirilabilir dosyalar GitHub Releases'ta; kurulum ve guncelleme Homebrew tap ve Scoop/winget ile (`brew upgrade` vb.). Kullanicinin Node kurmasi gerekmez.
-- **Yedek yol** (SEA basarisizsa): kurulum betigi (macOS/Linux `install.sh`, Windows `install.ps1`) resmi Node.js dagitimini kullanici dizinine (`~/.mock-studio/runtime`) indirir, SHASUMS256 ile dogrular, `sudo` istemez; `mock-studio update` yeni surumu yan klasore kurar ve geri alma icin onceki surumu saklar.
-- Guncelleme kontrolu yalnizca kullanici komutuyla veya acikca acilan ayarla yapilir (telemetri yok).
-- `mock-studio doctor`: Node, port, izinler, AI CLI'lari ve proje dosyalari icin tani.
-- npm'e yayin (provenance ile) gelistiriciler icin ikincil yol olarak devam eder.
+- **Primary path: single binary** (if the M6 SEA prototype succeeds): executables with Node embedded for macOS (arm64/x64), Linux (x64/arm64), and Windows (x64) on GitHub Releases; install and update through Homebrew tap and Scoop/winget (`brew upgrade`, etc.). Users do not need to install Node.
+- **Fallback path** (if SEA fails): an install script (`install.sh` for macOS/Linux, `install.ps1` for Windows) downloads the official Node.js distribution to the user's directory (`~/.mock-studio/runtime`), verifies it with SHASUMS256, and does not require `sudo`; `mock-studio update` installs the new version in a sibling directory and keeps the previous version for rollback.
+- Check for updates only on user command or when explicitly enabled by a setting (no telemetry).
+- `mock-studio doctor`: diagnose Node, ports, permissions, AI CLIs, and project files.
+- Continue publishing to npm (with provenance) as a secondary path for developers.
 
-**Cikis kriterleri:** Node kurulu olmayan temiz macOS, Windows ve Linux makinede tek komutla kurulum ve `mock-studio ui` calisiyor; paket yoneticisi veya `update` bir onceki surumden yukseltiyor.
+**Exit criteria:** On clean macOS, Windows, and Linux machines without Node installed, install with one command and run `mock-studio ui`; a package manager or `update` upgrades from the previous version.
 
-### Milestone 14: Istege duyarli ve dogrulayan response'lar
+### Milestone 14: Request-aware and validated responses
 
-Oneri havuzundan plana alindi (kullanici onayi, 2026-11-08).
+Moved from the proposal pool into the plan (user approval, 2026-11-08).
 
-- **Guvenli dinamik degerler:** `{{uuid}}`, `{{now}}`, `{{request.params.id}}`, `{{request.query.x}}`, `{{request.body.$.name}}` gibi sinirli, sabit bir token listesi. Kendi kucuk yorumlayicimizla islenir; Mockoon templating (Handlebars/faker) kapali kalir ve kod calismaz. POST sonrasi olusturulan kaydi geri dondurmek icin.
-- **Proje degiskenleri:** `{{vars.baseImageUrl}}` gibi proje bazli degiskenler (yan dosyada; gizli deger tutulmaz).
-- **Request modeli dogrulamasi:** Endpoint'e Kotlin/Swift request modeli baglanir; POST/PUT/PATCH body'si modele uymazsa ayarlanabilir 400/422 senaryosu doner ve log hatali alanlari gosterir.
-- **Dosya/binary response:** Resim, PDF gibi dosyalar proje klasorunden sunulur (yol `--root` icinde kalir); multipart upload istekleri kabul edilir ve loglanir.
+- **Safe dynamic values:** a limited, fixed list of tokens such as `{{uuid}}`, `{{now}}`, `{{request.params.id}}`, `{{request.query.x}}`, `{{request.body.$.name}}`. Process them with our own small interpreter; keep Mockoon templating (Handlebars/faker) disabled so code cannot run. For returning a record created after a POST.
+- **Project variables:** project-level variables such as `{{vars.baseImageUrl}}` (in the sidecar; no secret values stored).
+- **Request model validation:** link a Kotlin/Swift request model to an endpoint; if a POST/PUT/PATCH body does not match the model, return a configurable 400/422 scenario and show invalid fields in the log.
+- **File/binary responses:** serve files such as images and PDFs from the project directory (path remains within `--root`); accept and log multipart upload requests.
 
-**Cikis kriterleri:** Dinamik token'lar yalniz izin listesindekilerle calisir, bilinmeyen token oldugu gibi birakilip uyarilir; request modeli dogrulamasi 2xx/4xx yolunu dogru secer; dosya yolu kok disina cikamaz. Hepsi entegrasyon testleriyle dogrulanir.
+**Exit criteria:** Dynamic tokens work only from the allowlist; unknown tokens are left as-is with a warning; request model validation chooses the correct 2xx/4xx path; file paths cannot escape the root. Verify all with integration tests.
 
-### Milestone 15: Parser kapsami: polymorphism ve kalitim
+### Milestone 15: Parser coverage: polymorphism and inheritance
 
-M5'ten ertelenen madde (kullanici onayi, 2026-11-08).
+Deferred from M5 (user approval, 2026-11-08).
 
-- Kotlin `sealed class`/`sealed interface` (Kotlinx `@SerialName` + `classDiscriminator`, Gson/Moshi icin ayarlanabilir discriminator) ve Swift enum/protocol tabanli tiplerden `oneOf` sema.
-- Kalitimla gelen alanlar (Kotlin `open`/`abstract` ust sinif, Swift class kalitimi).
-- Her alt tip icin uretim varyanti.
-- Gercek dunya taramasi: acik kaynak Android/iOS/KMP uygulamalarinda `generate --list` calistirilip `issues` listesi raporlanir (firma kodu kullanilmaz).
+- Kotlin `sealed class`/`sealed interface` (Kotlinx `@SerialName` + `classDiscriminator`, configurable discriminator for Gson/Moshi) and `oneOf` schemas from Swift enum/protocol-based types.
+- Fields inherited from parent classes (Kotlin `open`/`abstract` base classes, Swift class inheritance).
+- Generation variant for each subtype.
+- Real-world scan: run `generate --list` on open-source Android/iOS/KMP applications and report the `issues` list (no company code used).
 
-**Cikis kriterleri:** Sentetik fixture'larda her alt tip icin semaya uygun uretim; desteklenmeyen kaliplar hala acikca raporlanir.
+**Exit criteria:** Generate schema-compliant output for each subtype in synthetic fixtures; unsupported patterns are still explicitly reported.
 
-### Milestone 16: Cihaz baglantisi
+### Milestone 16: Device connectivity
 
-- **Baglanti ekrani:** Dashboard'da emulator, simulator ve fiziksel cihaz icin base URL'ler ve QR kod; QR, `X-Mock-Scenario` kullanimini anlatan kisa rehbere de baglanir.
-- **Yerel HTTPS:** Proje basina yerel CA ve sertifika uretimi (kullanici onayiyla); Android `network_security_config` ve iOS cihaz guven adimlari rehberde. Varsayilan HTTP kalir.
+- **Connection screen:** Base URLs and QR codes for emulators, simulators, and physical devices in the dashboard; the QR code also links to a short guide explaining use of `X-Mock-Scenario`.
+- **Local HTTPS:** Generate a local CA and certificate per project (with user approval); document Android `network_security_config` and iOS device trust steps. HTTP remains the default.
 
-**Cikis kriterleri:** Fiziksel Android ve iOS cihazda QR ile baglanti ve HTTPS ile istek elle dogrulanir.
+**Exit criteria:** Manually verify QR connection and HTTPS requests on physical Android and iOS devices.
 
-### Milestone 17: Ek protokoller (ihtiyaca bagli)
+### Milestone 17: Additional protocols (as needed)
 
-Kullanici onayiyla plana alindi; ancak bir kullanim ihtiyaci dogdugunda baslatilir.
+Added to the plan with user approval; work begins when a use case arises.
 
-- WebSocket ve Server-Sent Events: zamanlanmis mesaj senaryolari.
-- GraphQL: tek endpoint uzerinde `operationName` ve degiskenlere gore senaryo secimi (M7 kural motoru uzerine), sema dosyasindan ornek uretim.
+- WebSocket and Server-Sent Events: scheduled message scenarios.
+- GraphQL: select scenarios on a single endpoint based on `operationName` and variables (on top of the M7 rule engine), generate examples from the schema file.
 
-**Cikis kriterleri:** Milestone baslarken yazilir.
+**Exit criteria:** Written when the milestone starts.
 
-## Faz gecis kurali
+## Phase transition rule
 
-Bir milestone'un cikis kriterleri gecmeden sonraki fazin ozellikleri temel akisa eklenmez. Parser veya motor entegrasyonunda belirsizlik varsa kapsam genisletmek yerine desteklenen durum ve hata mesaji netlestirilir. LAN erisimi ve AI, kullanici acikca etkinlestirmeden varsayilan olmaz.
+Do not add features from the next phase to the core flow until a milestone's exit criteria are met. If there is uncertainty in the parser or engine integration, clarify supported cases and error messages instead of expanding scope. LAN access and AI are not enabled by default; the user must explicitly enable them.

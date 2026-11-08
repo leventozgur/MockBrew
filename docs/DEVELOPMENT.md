@@ -1,137 +1,138 @@
-# Gelistirme Rehberi
+# Development Guide
 
-## Durum
+## Status
 
-Kaynak kod, test ve scaffold mevcuttur; komutlar [Uygulama komutlari](#uygulama-komutlari) bolumunde gercek script adlariyla yazilidir. Var olmayan komutlari calisir gibi dokumante etmeyin; yeni script eklenince asagiya ekleyin.
+Source code, tests, and scaffolding are available; commands are listed with their actual script names in [Application commands](#application-commands). Do not document nonexistent commands as if they worked; add new scripts below when they are added.
 
-## Ortam
+## Environment
 
-- Node.js >= 22.12 (`engines`). Test edilenler: 22.23, 24.22, 25.9. Ayni aralik CI'da (`.github/workflows/ci.yml`) kontrol edilir.
-- Paket yoneticisi: npm + lockfile.
-- Hedef platformlar: macOS, Windows, Linux (bkz. [Mimari](ARCHITECTURE.md#runtime-ve-platform)).
-- Mobil dogrulama icin Android Emulator ve iOS Simulator.
+- Node.js >= 22.12 (`engines`). Tested versions: 22.23, 24.22, 25.9. The same range is checked in CI (`.github/workflows/ci.yml`).
+- Package manager: npm + lockfile.
+- Target platforms: macOS, Windows, Linux (see [Architecture](ARCHITECTURE.md#runtime-and-platform)).
+- Android Emulator and iOS Simulator for mobile verification.
 
-## Bagimlilik kurallari
+## Dependency rules
 
-- Tum bagimliliklar exact version ile eklenir.
-- `@mockoon/commons` ve `@mockoon/commons-server` ayni surumde tutulur ve birlikte guncellenir.
-- Mockoon guncelleme proseduru:
-  1. Mockoon release notlarini ve dosya formati degisikliklerini oku.
-  2. Iki paketi ayni surume yukselt.
-  3. Runtime entegrasyon testlerini ve Mockoon desktop ile dosya uyumluluk kontrolunu calistir.
-  4. Yan dosya formati etkileniyorsa migration ekle.
-- Yeni bagimlilik eklemeden once lisansin ucretsiz kullanima uygun oldugu kontrol edilir.
-- Mockoon MIT lisans metni ve diger ucuncu parti lisanslar dagitimdaki notice dosyasina eklenir.
-- "Mockoon" adi ve logosu paket adinda, UI'da veya ikonlarda kullanilmaz.
+- Add all dependencies at exact versions.
+- Keep `@mockoon/commons` and `@mockoon/commons-server` at the same version and update them together.
+- Mockoon update procedure:
+  1. Read Mockoon release notes and file format changes.
+  2. Upgrade both packages to the same version.
+  3. Run runtime integration tests and check file compatibility with Mockoon desktop.
+  4. Add a migration if the sidecar file format is affected.
+- Periodic dependency review: check releases of both engine packages, update them together using the procedure above, run the full test suite, and update `NOTICE.md` with `npm run notice`.
+- Before adding a dependency, verify that its license permits free use.
+- Add the Mockoon MIT license text and other third-party licenses to the distribution's notice file.
+- Do not use the name or logo "Mockoon" in the package name, UI, or icons.
 
-## Modul sinirlari
+## Module boundaries
 
-Tek paket, ayri dizinler (`src/`):
+Single package, separate directories (`src/`):
 
-| Dizin | Sorumluluk | Mockoon bagimliligi |
+| Directory | Responsibility | Mockoon dependency |
 |---|---|---|
-| `parser/` | tree-sitter ile Kotlin/Swift AST'i -> dil bagimsiz IR; `kotlin/{gson,kotlinx,moshi}.ts` ve `swift/` birbirinden bagimsiz adapter'lar; child process (`host`, `worker`) | yok |
-| `schema/` | IR -> JSON Schema, naming/tarih ayarlari, Ajv dogrulama | yok |
-| `generator/` | deterministik yerel uretici (alan adi heuristic'leri, varyantlar) | yok |
-| `core/` | domain tipleri, dogrulama, cakisma kontrolu, `ProjectService`, model servisi, schema diff, OpenAPI | yok |
-| `store/` | Mockoon environment + yan dosya, atomik yazma, dosya izleme | **var** |
-| `runtime/` | turetilmis environment, guvenli mod, motoru calistirma, maskeli log | **var** |
-| `control-api/` | Fastify, yalniz loopback | yok |
-| `mcp/` | MCP tool'lari | yok |
-| `ai/` | provider interface'i, process calistirici, prompt | yok |
-| `cli/` | komutlar | yok |
-| `ui/` (kokte) | React + Vite arayuzu; `src/core/view.ts` gibi saf tip dosyalarini import eder | yok |
+| `parser/` | Kotlin/Swift AST via tree-sitter -> language-independent IR; `kotlin/{gson,kotlinx,moshi}.ts` and `swift/` are independent adapters; child process (`host`, `worker`) | none |
+| `schema/` | IR -> JSON Schema, naming/date settings, Ajv validation | none |
+| `generator/` | deterministic local generator (field-name heuristics, variants) | none |
+| `core/` | domain types, validation, conflict detection, `ProjectService`, model service, schema diff, OpenAPI | none |
+| `store/` | Mockoon environment + sidecar file, atomic writes, file watching | **yes** |
+| `runtime/` | derived environment, safe mode, running the engine, masked logs | **yes** |
+| `control-api/` | Fastify, loopback only | none |
+| `mcp/` | MCP tools | none |
+| `ai/` | provider interface, process runner, prompt | none |
+| `cli/` | commands | none |
+| `ui/` (at root) | React + Vite interface; imports pure type files such as `src/core/view.ts` | none |
 
-Mockoon paketlerine yalnizca `store` ve `runtime` dogrudan bagimlidir. Diger moduller kendi domain tiplerini (`core/model.ts`) kullanir. Gson, Kotlinx Serialization, Moshi ve Swift Codable adapter'lari birbirinden bagimsizdir.
+Only `store` and `runtime` depend directly on Mockoon packages. Other modules use their own domain types (`core/model.ts`). The Gson, Kotlinx Serialization, Moshi, and Swift Codable adapters are independent of each other.
 
-## Test kurallari
+## Test rules
 
-### Parser ve uretim
+### Parsing and generation
 
-- Fixture'lar kucuk ve sentetiktir; musteri veya production model kodu fixture'a kopyalanmaz.
-- Her fixture icin parse sonucu, JSON Schema ve ornek JSON snapshot'i veya semantic assertion'i bulunur.
-- Kapsanacak durumlar: nullable/optional, default deger, enum (raw value dahil), liste, map, nested type, basit generic wrapper, baska dosyada tanimli tip, cozumlenemeyen tip, unsupported yapi raporu.
-- Naming strategy ve tarih formati ayarlarinin ciktiya etkisi test edilir.
-- Yerel uretici deterministiktir: ayni girdi ve seed ayni ciktiyi verir.
-- `Long`/`Int64` alanlarinin guvenli aralikta uretildigi ve ham body'de hassasiyetin korundugu test edilir.
+- Fixtures are small and synthetic; do not copy customer or production model code into fixtures.
+- For each fixture, include a parse result, JSON Schema, and example JSON snapshot or semantic assertion.
+- Cover: nullable/optional, default values, enums (including raw values), lists, maps, nested types, simple generic wrappers, types defined in another file, unresolved types, and reports of unsupported constructs.
+- Test the effect of naming strategy and date format settings on output.
+- The local generator is deterministic: the same input and seed produce the same output.
+- Test that `Long`/`Int64` fields are generated within the safe range and that precision is preserved in the raw body.
 
 ### Runtime
 
-- Programatik baslatma/durdurma, port korunmasi ve restartsiz guncelleme.
-- Path parametreleri, method/path eslesmesi, collection cakisma ve golgeleme uyarisi.
-- Senaryo secimi, latency, status, header, bos body (204).
-- Eslesmeyen istek 404 JSON'u ve log isareti.
-- CORS preflight, origin yansitma.
-- Uretilen environment dosyasinin Mockoon CLI ile de calistigi (uyumluluk testi).
+- Programmatic start/stop, port preservation, and updates without restarting.
+- Path parameters, method/path matching, collection conflicts, and shadowing warnings.
+- Scenario selection, latency, status, headers, and empty body (204).
+- The 404 JSON and log marker for unmatched requests.
+- CORS preflight and origin reflection.
+- Verify that the generated environment file also works with Mockoon CLI (compatibility test).
 
-### Dosya katmani
+### File layer
 
-- Atomik yazma, dis degisiklik algilama, kaydedilmemis degisiklikle cakisma.
-- Yan dosya icin eski, guncel, bozuk ve bilinmeyen major `schemaVersion`.
-- Path traversal ve project klasoru disina yazma denemelerinin reddedilmesi.
+- Atomic writes, detection of external changes, and conflicts with unsaved changes.
+- Old, current, malformed, and unknown-major `schemaVersion` values for the sidecar file.
+- Rejection of path traversal and attempts to write outside the project directory.
 
-### Guvenlik
+### Security
 
-- Control API'nin loopback disindan, yanlis Host/Origin veya token olmadan erisilemedigi.
-- Log maskeleme (Authorization, cookie, API key) ve body loglamanin varsayilan kapali oldugu.
-- MCP tool'larinin project klasoru disina erisemedigi ve gecersiz body'yi kaydetmedigi.
+- The Control API cannot be accessed from outside loopback, with an incorrect Host/Origin, or without a token.
+- Log masking (Authorization, cookie, API key) and body logging disabled by default.
+- MCP tools cannot access paths outside the project directory and do not save invalid bodies.
 
 ### AI CLI adapter
 
-- Mock executable ile: basarili cikti, bozuk JSON, non-zero exit, timeout, cancellation, command not found.
-- Kullanici girdisinin shell'e birlestirilmedigi; onay olmadan cagri yapilmadigi.
+- With a mock executable: successful output, malformed JSON, non-zero exit, timeout, cancellation, and command not found.
+- User input is not concatenated into the shell; no calls are made without approval.
 
-## Manuel dogrulama matrisi
+## Manual verification matrix
 
-Durum sutunu, bu depoyu hazirlarken hangi denemenin gercekten yapildigini gosterir.
+The Status column shows which checks were actually performed while preparing this repository.
 
-| Kontrol | Durum |
+| Check | Status |
 |---|---|
-| Browser: UI acilir, bozuk JSON kaydedilmez, senaryo degisikligi aninda yansir | Yapildi (entegre tarayici; bozuk JSON ayrica otomatik testlerde) |
-| Android Emulator: `10.0.2.2` ile response alinir | Yapildi (Pixel_8a AVD, `nc` ile agi dogrular). Uygulama icinde debug `network_security_config` denenmedi |
-| Android fiziksel cihaz: `adb reverse` ile `localhost` | `adb reverse` emulatorde dogrulandi; fiziksel cihaz denenmedi |
-| iOS Simulator: `localhost` ile response alinir | Yapildi (iPhone 17, `simctl spawn curl`). Uygulama icinde `NSAllowsLocalNetworking` denenmedi |
-| iOS fiziksel cihaz: yalnizca LAN binding acikken ve ayni agda baglanir | Denenmedi (LAN secenegi ve uyarilari testlerde) |
-| WebView/browser istemcisi: OPTIONS preflight ve CORS ayarlari | HTTP seviyesinde test edildi; gercek bir WebView'de denenmedi |
-| Mockoon desktop: arac ile olusturulan dosya acilir, duzenlenir; arac degisikligi algilar | **Denenmedi** (desktop kurulu degil). Mockoon CLI ve Mockoon'un kendi sema dogrulamasi gecti; aracin dis degisikligi algilamasi testlerde |
-| Kiro/Copilot: MCP server baglanir, model parse edilir, uretilen body dogrulanip kaydedilir | Protokol seviyesinde SDK istemcisiyle yapildi; gercek Kiro/Copilot chat'i ile denenmedi |
-| Windows ve Linux | Denenmedi |
-| Ekip kod tabani (Moshi, generic wrapper, sealed class kullanimi) | Denenmedi; `mock-studio generate --list` ile gercek modellerde calistirilmali |
+| Browser: UI opens, malformed JSON is not saved, scenario changes appear immediately | Done (integrated browser; malformed JSON also covered by automated tests) |
+| Android Emulator: receives a response via `10.0.2.2` | Done (Pixel_8a AVD; network verified with `nc`). Debug `network_security_config` was not tested in the app |
+| Physical Android device: `localhost` via `adb reverse` | `adb reverse` verified on the emulator; not tested on a physical device |
+| iOS Simulator: receives a response via `localhost` | Done (iPhone 17, `simctl spawn curl`). `NSAllowsLocalNetworking` was not tested in the app |
+| Physical iOS device: connects on the same network when LAN binding is enabled | Not tested (LAN option and warnings are covered by tests) |
+| WebView/browser client: OPTIONS preflight and CORS settings | Tested at the HTTP level; not tested in a real WebView |
+| Mockoon desktop: opens and edits a file created by the tool; the tool detects the change | **Not tested** (desktop is not installed). Mockoon CLI and Mockoon's own schema validation passed; detection of external changes is covered by tests |
+| Kiro/Copilot: connects to the MCP server, parses a model, validates and saves a generated body | Done at the protocol level with an SDK client; not tested with real Kiro/Copilot chat |
+| Windows and Linux | Not tested |
+| Team codebase (Moshi, generic wrappers, sealed class usage) | Not tested; run against real models with `mock-studio generate --list` |
 
-## Release oncesi kontrol
+## Pre-release checklist
 
-- [x] Control API loopback disina acilmiyor; mock listener LAN'a kullanici secimi olmadan acilmiyor (`test/control-api.test.ts`, `test/cli.test.ts`).
-- [x] Mockoon paket surumleri (9.10.0), Node araligi (`>=22.12.0`) ve yan dosya `schemaVersion` (1) belgelenmis.
-- [x] Mockoon uyumluluk testi geciyor (Mockoon CLI 9.10.0).
-- [x] Lisans notice dosyasi guncel (`npm run notice`); "Mockoon" markasi urun adinda/arayuzde yok.
-- [x] Ucretli bir servis veya AI CLI paketlenmiyor; telemetri yok.
-- [x] Proje dosyalari mutlak yol, kullanici adi veya token icermiyor (testler). Loglar maskeli; body loglama varsayilan kapali.
-- [ ] `@mock-api-studio` npm kapsaminin sahipligi dogrulanmadi; yayin oncesi paket adi kesinlestirilmeli.
-- [ ] Mockoon desktop, fiziksel cihaz ve Windows/Linux kontrolleri (yukaridaki matris).
-- [ ] Kurumsal kullanim oncesi sirketin acik kaynak arac onayi (MPL-2.0 bagimliligi `@jmespath-community/jmespath` icin not dusuldu).
+- [x] Control API is not exposed beyond loopback; the mock listener does not bind to LAN without user selection (`test/control-api.test.ts`, `test/cli.test.ts`).
+- [x] Mockoon package versions (9.10.0), Node range (`>=22.12.0`), and sidecar `schemaVersion` (1) are documented.
+- [x] Mockoon compatibility test passes (Mockoon CLI 9.10.0).
+- [x] License notice file is up to date (`npm run notice`); the "Mockoon" brand is absent from the product name/UI.
+- [x] No paid service or AI CLI package is bundled; no telemetry.
+- [x] Project files contain no absolute paths, usernames, or tokens (tests). Logs are masked; body logging is disabled by default.
+- [ ] Ownership of the `@mock-api-studio` npm scope is not verified; finalize the package name before publishing.
+- [ ] Mockoon desktop, physical device, and Windows/Linux checks (matrix above).
+- [ ] Company approval for open-source tools before corporate use (the `@jmespath-community/jmespath` MPL-2.0 dependency has been noted).
 
-## Uygulama komutlari
+## Application commands
 
 ```sh
-npm install              # bagimliliklar (exact surum, package-lock.json); `prepare` scripti derlemeyi de yapar
-npm run build            # sunucu (tsc -> dist/) ve UI (vite -> dist/ui)
-npm run build:server     # yalniz tsc
-npm run build:ui         # yalniz UI
-npm run dev:ui           # Vite dev sunucusu; MOCK_STUDIO_API=http://127.0.0.1:<ui-portu> ile `ui` komutuna baglanir
-npm test                 # vitest (test baslamadan tsc ile dist/ derlenir)
-npm run lint             # tip kontrolu: sunucu ve UI
-npm run notice           # NOTICE.md'yi uretir
+npm install              # dependencies (exact versions, package-lock.json); the `prepare` script also builds
+npm run build            # server (tsc -> dist/) and UI (vite -> dist/ui)
+npm run build:server     # tsc only
+npm run build:ui         # UI only
+npm run dev:ui           # Vite dev server; connects to the `ui` command via MOCK_STUDIO_API=http://127.0.0.1:<ui-port>
+npm test                 # vitest (dist/ is built with tsc before tests start)
+npm run lint             # type checking: server and UI
+npm run notice           # generates NOTICE.md
 
 node dist/cli/main.js --help
 ```
 
-CLI komutlari: `init`, `ui`, `serve`, `generate`, `check`, `export openapi`, `snippets`, `mcp` (`mock-studio <komut> --help`).
+CLI commands: `init`, `ui`, `serve`, `generate`, `check`, `export openapi`, `snippets`, `mcp` (`mock-studio <command> --help`).
 
-Testler derlenmis cikti (`dist/`) uzerinde calisir: parser WASM'i ayri bir child process'te (`--liftoff-only`) oldugu icin `src/parser/host.ts` calisma zamaninda `dist/parser/worker.js`'i bulur. `npm test` bunu `test/global-setup.ts` ile kendisi derler.
+Tests run against the compiled output (`dist/`): because the parser WASM runs in a separate child process (`--liftoff-only`), `src/parser/host.ts` locates `dist/parser/worker.js` at runtime. `npm test` builds this itself using `test/global-setup.ts`.
 
-## MCP kurulumu (Kiro ve Copilot)
+## MCP setup (Kiro and Copilot)
 
-MCP server stdio uzerinden calisir; `--root` model dosyalarinin okunabilecegi klasordur (genelde uygulama reposunun koku), `--project` mock dosyalarinin klasorudur. Ornekler, araci [README'deki kurulum](../README.md#kurulum) ile PATH'e koyduginizi varsayar (`mock-studio --version` calismali). Paket npm'e yayinlandiktan sonra `"command": "npx"` ve `"args": ["-y", "@mock-api-studio/studio", "mcp", ...]` da kullanilabilir.
+The MCP server runs over stdio; `--root` is the directory from which model files can be read (usually the root of the app repository), and `--project` is the directory for mock files. The examples assume you have added the tool to PATH using the [installation instructions in the README](../README.md#installation) (`mock-studio --version` should work). After the package is published to npm, you can also use `"command": "npx"` and `"args": ["-y", "@mock-api-studio/studio", "mcp", ...]`.
 
 Kiro (`.kiro/settings/mcp.json`):
 
@@ -160,4 +161,4 @@ GitHub Copilot (VS Code, `.vscode/mcp.json`):
 }
 ```
 
-Araci PATH'e koymadan denemek icin `"command": "node"` ve `"args": ["<repo>/dist/cli/main.js", "mcp", ...]` kullanin. Chat'te ornek istek: "`app/model/Order.kt` icindeki `Order` icin, biri iptal edilmis uc siparisli bir GET /orders mock'u olustur"; AI sirasiyla `parse_model`, `get_schema`, `save_scenario` tool'larini cagirir ve modele uymayan body reddedilir.
+To try it without adding the tool to PATH, use `"command": "node"` and `"args": ["<repo>/dist/cli/main.js", "mcp", ...]`. Example chat request: "Create a GET /orders mock for `Order` in `app/model/Order.kt` with three orders, one of them canceled"; the AI calls the `parse_model`, `get_schema`, and `save_scenario` tools in sequence, and bodies that do not match the model are rejected.

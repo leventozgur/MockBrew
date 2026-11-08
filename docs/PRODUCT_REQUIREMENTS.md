@@ -1,164 +1,164 @@
-# Urun Gereksinimleri
+# Product Requirements
 
 ## Problem
 
-Mobil uygulama gelistirmesi sirasinda backend endpoint'leri her zaman hazir olmuyor. Ekip, uygulama kodunu bekletmeden mobil modellere uygun JSON donen yerel endpoint'ler tanimlamali, response'lari duzenleyebilmeli, ayni gelistirmede gereken birden fazla endpoint'i birlikte calistirabilmeli ve bu tanimlari ekip ile paylasabilmelidir.
+Backend endpoints are not always ready during mobile app development. The team needs to define local endpoints that return JSON matching mobile models, edit responses, run multiple endpoints needed for the same development effort together, and share these definitions with the team without blocking app development.
 
-Genel mock araclari (Mockoon, WireMock vb.) mock calistirmayi cozer, ancak mobil model kodundan dogru response uretmeyi cozmez. Bu urunun ayirt edici degeri model'den response uretimidir; mock calistirma Mockoon motorundan alinir.
+General-purpose mock tools (Mockoon, WireMock, etc.) solve running mocks, but they do not solve generating correct responses from mobile model code. This product's distinguishing value is generating responses from models; mock execution uses the Mockoon engine.
 
-## Hedefler
+## Goals
 
-- Android, iOS ve KMP uygulamalarinin baglanabilecegi yerel HTTP JSON servisleri sunmak.
-- Kotlin/Swift modelinden JSON Schema ve semaya uygun ornek response uretmek.
-- Endpoint ve response senaryolarini UI ve CLI uzerinden yonetmek.
-- Collection'lari birlikte, tek port uzerinden calistirmak.
-- Mock tanimlarini git'e konabilen dosyalarla paylasmak.
-- AI, cloud hesabi veya ag baglantisi olmadan temel islevleri calistirmak.
-- Kurumsal ve bireysel kullanimda ucretsiz kalmak.
+- Provide local HTTP JSON services that Android, iOS, and KMP apps can connect to.
+- Generate JSON Schema and schema-compliant sample responses from Kotlin/Swift models.
+- Manage endpoints and response scenarios through the UI and CLI.
+- Run collections together on a single port.
+- Share mock definitions as files that can be committed to git.
+- Support core functionality without AI, a cloud account, or a network connection.
+- Remain free for enterprise and individual use.
 
-## Ana akislar
+## Main workflows
 
-### Backend beklenirken endpoint tanimlama
+### Defining endpoints while waiting for the backend
 
-1. Kullanici bir mock dosyasi (project) ve collection olusturur.
-2. Method, path (`/users/:id` gibi parametreli olabilir), status, header ve body tanimlar.
-3. Collection'lari aktif edip `serve` ile baslatir; mobil uygulamanin debug base URL'ini yerel adrese yonlendirir.
-4. Gelen istekleri ve eslesmeyen istekleri loglardan izler.
+1. The user creates a mock file (project) and a collection.
+2. They define the method, path (which may include parameters such as `/users/:id`), status, headers, and body.
+3. They activate collections and start them with `serve`; they point the mobile app's debug base URL to the local address.
+4. They monitor incoming and unmatched requests in the logs.
 
-### Modelden response uretme
+### Generating responses from a model
 
-1. Kullanici Kotlin/Swift model dosyasini/klasorunu secer veya kodu yapistirir.
-2. Arac modeli JSON Schema'ya cevirir; cozumlenemeyen tipleri ve desteklenmeyen yapilari raporlar.
-3. Kullanici naming strategy (or. snake_case) ve tarih formati gibi decoder seviyesindeki ayarlari secer.
-4. Yerel uretici alan adlarina gore anlamli, deterministik veri uretir. Istenirse minimal, tam dolu ve bos liste varyantlari uretilir.
-5. Response onizlenir, duzenlenir ve endpoint'e senaryo olarak kaydedilir.
+1. The user selects a Kotlin/Swift model file or folder, or pastes code.
+2. The tool converts the model to JSON Schema and reports unresolved types and unsupported constructs.
+3. The user selects decoder-level settings such as a naming strategy (e.g. snake_case) and date format.
+4. The local generator produces meaningful, deterministic data based on field names. Minimal, fully populated, and empty-list variants can also be generated.
+5. The response is previewed, edited, and saved to the endpoint as a scenario.
 
-### AI ile is anlamina uygun veri uretme
+### Generating data that matches the business context with AI
 
-1. Kullanici Kiro/Copilot chat'inde MCP tool'lari uzerinden model ve istegini verir ("biri iptal edilmis 3 siparis" gibi).
-2. AI araci veriyi uretir; arac semaya gore dogrular ve endpoint'e kaydeder.
-3. Sonraki asamada ayni akis UI icinden, kullanicinin onayladigi bir AI CLI cagrisi ile de yapilabilir.
+1. The user provides a model and a request in Kiro/Copilot chat through MCP tools (e.g. "three orders, one of them canceled").
+2. The AI tool generates data; the tool validates it against the schema and saves it to the endpoint.
+3. In a later phase, the same workflow can also be run from the UI through an AI CLI call approved by the user.
 
-### Ekip ile paylasma
+### Sharing with the team
 
-1. Mock dosyalari mobil uygulama reposunda veya ayri bir repoda tutulur.
-2. Ekip uyeleri dosyalari git ile ceker; arac ve Mockoon desktop degisiklikleri dosya izleme ile yukler.
-3. Disaridan gelen dosyalar surum ve sema acisindan dogrulanir; hatali dosya acik hata verir.
+1. Mock files are stored in the mobile app repository or a separate repository.
+2. Team members pull the files with git; the tool and Mockoon desktop load changes through file watching.
+3. Incoming files are validated for version and schema; invalid files produce an explicit error.
 
-## Fonksiyonel gereksinimler
+## Functional requirements
 
-### Mock calistirma
+### Running mocks
 
-- FR-01: Project birden fazla collection, collection birden fazla endpoint icerebilmelidir.
-- FR-02: Collection'lar tek tek aktif/pasif yapilabilmeli; aktif collection'lar ayni port uzerinden birlikte calismalidir.
-- FR-03: Endpoint method, path, status, header ve body tasimalidir. Path parametreleri desteklenmelidir.
-- FR-04: Bir endpoint birden fazla response senaryosu tasiyabilmeli ve aktif senaryo UI/CLI'dan secilebilmelidir.
-- FR-05: Aktif collection'lar arasinda ayni method + path cakismasi, baslatmadan ve calisirken collection aktif edildiginde acik hata olarak gosterilmelidir. Hangi collection ve endpoint'in cakistigi belirtilmelidir.
-- FR-06: Response basina sabit gecikme (latency) ayarlanabilmelidir.
-- FR-07: Bos body ile 204 gibi status'ler desteklenmeli; JSON body'ler kaydetmeden once parse edilerek dogrulanmalidir.
-- FR-08: Body ham metin olarak saklanmali ve oldugu gibi sunulmalidir (64-bit sayilarin hassasiyeti korunur).
-- FR-09: Calisan sunucuda yapilan degisiklik, kullanici yeniden baslatma yapmadan yansimalidir.
-- FR-10: Eslesmeyen istekler aciklayici bir JSON ile 404 donmeli ve logda ayrica isaretlenmelidir.
-- FR-11: Varsayilan `Content-Type` `application/json; charset=utf-8` olmalidir.
-- FR-12: CORS ve OPTIONS preflight ayarlanabilmeli; credentials iceren istekler icin origin yansitma secenegi olmalidir.
-- FR-13: Mock'lar UI olmadan, CLI ile (`serve`) calistirilabilmelidir (CI ve UI testleri icin).
+- FR-01: A project must support multiple collections, and each collection must support multiple endpoints.
+- FR-02: Collections must be individually activatable/deactivatable; active collections must run together on the same port.
+- FR-03: An endpoint must include a method, path, status, headers, and body. Path parameters must be supported.
+- FR-04: An endpoint must support multiple response scenarios, and the active scenario must be selectable from the UI/CLI.
+- FR-05: A duplicate method + path across active collections must be reported as an explicit error both before startup and when a collection is activated while running. The conflicting collection and endpoint must be identified.
+- FR-06: A fixed response delay (latency) must be configurable.
+- FR-07: Statuses such as 204 with an empty body must be supported; JSON bodies must be parsed and validated before saving.
+- FR-08: Bodies must be stored as raw text and served as-is (preserving the precision of 64-bit numbers).
+- FR-09: Changes made on a running server must take effect without requiring the user to restart it.
+- FR-10: Unmatched requests must return an explanatory JSON response with status 404 and be marked separately in the logs.
+- FR-11: The default `Content-Type` must be `application/json; charset=utf-8`.
+- FR-12: CORS and OPTIONS preflight must be configurable; an option to reflect the origin must be available for requests that include credentials.
+- FR-13: Mocks must be runnable from the CLI with `serve`, without the UI (for CI and UI tests).
 
-### Modelden uretim
+### Generation from models
 
-- FR-20: Kotlin girdisinde Gson `@SerializedName` (alternate dahil) ve Kotlinx `@Serializable`/`@SerialName` dikkate alinmalidir.
-- FR-21: Swift girdisinde `Codable`, `CodingKeys`, Optional alanlar, raw value'lu enum'lar ele alinmalidir.
-- FR-22: Basit generic wrapper'lar (`BaseResponse<T>` gibi) tip yerine koyma ile desteklenmelidir.
-- FR-23: Naming strategy (birebir, snake_case) ve tarih formati (ISO 8601, epoch saniye/milisaniye) uretim ayari olarak secilebilmelidir.
-- FR-24: Birden fazla dosya veya klasor girdisi ile baska dosyada tanimli tipler cozulmeli; cozumlenemeyen tip uyari olarak raporlanmalidir.
-- FR-25: Yerel uretici alan adina gore anlamli deger uretmelidir (email, isim, telefon, URL, fiyat, tarih vb.) ve ayni girdide ayni ciktiyi vermelidir.
-- FR-26: Minimal (yalniz zorunlu alanlar), tam dolu ve bos liste varyantlari uretilebilmelidir.
-- FR-27: Uretilen veya elle duzenlenen body, bagli model semasina gore dogrulanmali; ihlaller uyari olarak gosterilmelidir.
+- FR-20: For Kotlin input, Gson `@SerializedName` (including alternate names) and Kotlinx `@Serializable`/`@SerialName` must be considered.
+- FR-21: For Swift input, `Codable`, `CodingKeys`, Optional fields, and enums with raw values must be handled.
+- FR-22: Simple generic wrappers (such as `BaseResponse<T>`) must be supported through type substitution.
+- FR-23: Naming strategy (as-is, snake_case) and date format (ISO 8601, epoch seconds/milliseconds) must be selectable as generation settings.
+- FR-24: With multiple file or folder inputs, types defined in other files must be resolved; unresolved types must be reported as warnings.
+- FR-25: The local generator must produce meaningful values based on field names (email, name, phone, URL, price, date, etc.) and return the same output for the same input.
+- FR-26: Minimal (required fields only), fully populated, and empty-list variants must be generatable.
+- FR-27: A generated or manually edited body must be validated against its associated model schema; violations must be shown as warnings.
 
-### AI entegrasyonu
+### AI integration
 
-- FR-30: Arac, Kiro/Copilot gibi istemcilerin cagirabilecegi bir MCP server sunmalidir (model parse, body dogrulama, endpoint kaydetme).
-- FR-31: Istege bagli UI icinden AI CLI uretimi; prompt opsiyoneldir, prompt yoksa alan adlarindan anlamsal veri uretilir.
-- FR-32: AI kullanilamiyor veya kapaliysa yerel uretici tum akislari karsilamalidir.
+- FR-30: The tool must provide an MCP server that clients such as Kiro/Copilot can call (model parsing, body validation, endpoint saving).
+- FR-31: Optional AI CLI generation from the UI; the prompt is optional, and if none is provided, semantic data is generated from field names.
+- FR-32: If AI is unavailable or disabled, the local generator must support all workflows.
 
-### v1 gereksinimleri (2026-11-08, planlandi)
+### v1 requirements (2026-11-08, planned)
 
-Kaynak: kullanici kararlari, 2026-11-08. Milestone ve kabul kriterleri [Roadmap - v1 plani](ROADMAP.md#v1-plani-m6-m17) icindedir; henuz uygulanmadi.
+Source: user decisions, 2026-11-08. Milestones and acceptance criteria are in [Roadmap - v1 plan](ROADMAP.md#v1-plan-m6-m17); not yet implemented.
 
-- FR-40: Senaryo secimi kosullara baglanabilmelidir: header, query, route parametresi, body alani, cookie ve istek sirasi; esittir, regex, bos/yok, dizi icerir operatorleri; AND/OR birlesimi; tersine cevirme. Eslesme yoksa varsayilan senaryo doner. (M7)
-- FR-41: Endpoint modu secilebilmelidir: kurallara gore, sabit senaryo, sirali, rastgele. (M7)
-- FR-42: Istemci `X-Mock-Scenario` header'i ile senaryoyu zorla secebilmelidir (proje ayariyla kapatilabilir). (M7)
-- FR-43: Request logu hangi senaryonun neden secildigini gostermelidir. (M7)
-- FR-44: Adlandirilmis test profilleri bircok endpoint'in senaryosunu tek islemle degistirebilmeli; profiller git ile paylasilabilmelidir. (M8)
-- FR-45: Gecikme jitter'i, zaman asimi ve oranli hata gibi ag kosullari simule edilebilmelidir. (M8)
-- FR-46: Model degistiginde bagli 2xx body'ler yeni modele uygun olarak, var olan degerler korunarak, onizleme ve onayla guncellenebilmelidir (CLI, MCP, UI). (M9)
-- FR-47: MCP, UI ve CLI'daki tum yonetim islemlerini (endpoint, senaryo, kural, profil, collection, sunucu, log, model kontrolu, import/export) dar ve dogrulanan tool'larla sunmalidir. (M10)
-- FR-48: Makinede kurulu AI CLI'lari (Claude Code, Codex, Copilot, Gemini, Kiro CLI) algilanmali ve secilebilmelidir. (M11)
-- FR-49: Collection'lar tek dosya paketi olarak export/import edilebilmeli; Postman v2.1, OpenAPI 3.x, HAR ve cURL import, Postman v2.1 export desteklenmelidir. (M12)
-- FR-50: Node.js kurulu olmayan makinede tek komutla kurulum ve `mock-studio update` ile guncelleme/geri alma yapilabilmelidir. (M13)
-- FR-51: Proxy uzerinden gelen gercek backend yanitlari, onizleme ve hassas header temizligiyle senaryo olarak kaydedilebilmelidir. (M12)
-- FR-52: Response'larda izin listeli, kod calistirmayan dinamik degerler ve proje degiskenleri kullanilabilmelidir. (M14)
-- FR-53: Request body'si bagli request modeline gore dogrulanabilmeli; uymazsa 400/422 senaryosu donmelidir. (M14)
-- FR-54: Dosya/binary response sunulabilmeli, multipart upload istekleri kabul edilmelidir. (M14)
-- FR-55: Sealed class/polymorphism ve kalitim modellerden sema ve ornek uretilebilmelidir. (M15)
-- FR-56: Dashboard cihaz baglantisi icin base URL ve QR kod gostermeli; istege bagli yerel HTTPS sunulmalidir. (M16)
-- FR-57: WebSocket/SSE ve GraphQL ihtiyac halinde desteklenir. (M17)
+- FR-40: Scenario selection must support conditions: header, query, route parameter, body field, cookie, and request order; operators for equals, regex, empty/missing, and array contains; AND/OR combinations; and negation. The default scenario is returned when nothing matches. (M7)
+- FR-41: The endpoint mode must be selectable: rules-based, fixed scenario, sequential, or random. (M7)
+- FR-42: A client must be able to force scenario selection with the `X-Mock-Scenario` header (can be disabled in project settings). (M7)
+- FR-43: The request log must show which scenario was selected and why. (M7)
+- FR-44: Named test profiles must be able to change scenarios across many endpoints in one operation; profiles must be shareable through git. (M8)
+- FR-45: Network conditions such as latency jitter, timeouts, and rate-based errors must be simulatable. (M8)
+- FR-46: When a model changes, associated 2xx bodies must be updatable to match the new model while preserving existing values, with preview and confirmation (CLI, MCP, UI). (M9)
+- FR-47: MCP, UI, and CLI must expose all management operations (endpoint, scenario, rule, profile, collection, server, log, model check, import/export) through narrow, validated tools. (M10)
+- FR-48: AI CLIs installed on the machine (Claude Code, Codex, Copilot, Gemini, Kiro CLI) must be detectable and selectable. (M11)
+- FR-49: Collections must support export/import as a single-file package; importing Postman v2.1, OpenAPI 3.x, HAR, and cURL, and exporting Postman v2.1 must be supported. (M12)
+- FR-50: Installation on a machine without Node.js must be possible with a single command, and `mock-studio update` must support updates and rollback. (M13)
+- FR-51: Real backend responses received through a proxy must be saveable as scenarios, with preview and sensitive header removal. (M12)
+- FR-52: Responses must support allowlisted, non-executable dynamic values and project variables. (M14)
+- FR-53: Request bodies must be validated against the associated request model; a 400/422 scenario must be returned when validation fails. (M14)
+- FR-54: File/binary responses must be servable, and multipart upload requests must be accepted. (M14)
+- FR-55: Schemas and samples must be generatable from models with sealed classes/polymorphism and inheritance. (M15)
+- FR-56: The dashboard must show a base URL and QR code for device connectivity; optional local HTTPS must be available. (M16)
+- FR-57: WebSocket/SSE and GraphQL will be supported if needed. (M17)
 
-## Ilk parser kapsami
+## Initial parser scope
 
-- Kotlin: data class, temel scalar tipler, nullable alanlar, default degerli alanlar, ic ice tipler, `List`/`Set`/`Map<String, T>`, enum'lar, basit generic'ler, `@Serializable`, `@SerialName`, `@Transient`, Gson `@SerializedName`.
-- Swift: `Codable` struct, `CodingKeys`, temel scalar tipler, Optional alanlar, ic ice tipler, diziler, sozlukler, raw value'lu enum'lar, basit generic'ler.
-- Bilinen tipler icin eslemeler: `Date`, `Instant`, `kotlinx.datetime`, `UUID`, `URL`, `BigDecimal`, `Long`/`Int64`.
-- Unsupported olarak raporlanacaklar: custom serializer/`init(from:)`, sealed class / polymorphism, property wrapper'lar, hesaplanan alanlar, kalitim ile gelen alanlar (ilk surumde).
-- Swift'te baslangic degeri olan `let` alanlarin decode edilmedigi dikkate alinmalidir.
-- Parser kaynak kodu derlememeli veya calistirmamalidir. Desteklenmeyen yapilar sessizce atlanmaz.
-- Moshi (`@Json(name=)`) kullanimi M0'da ekip kod tabanlarinda kontrol edilir; yayginsa ilk kapsama alinir.
+- Kotlin: data class, basic scalar types, nullable fields, fields with default values, nested types, `List`/`Set`/`Map<String, T>`, enums, simple generics, `@Serializable`, `@SerialName`, `@Transient`, Gson `@SerializedName`.
+- Swift: `Codable` struct, `CodingKeys`, basic scalar types, Optional fields, nested types, arrays, dictionaries, enums with raw values, simple generics.
+- Mappings for known types: `Date`, `Instant`, `kotlinx.datetime`, `UUID`, `URL`, `BigDecimal`, `Long`/`Int64`.
+- To be reported as unsupported: custom serializers/`init(from:)`, sealed classes / polymorphism, property wrappers, computed properties, inherited fields (in the first version).
+- In Swift, account for `let` fields with initial values not being decoded.
+- The parser must not compile or execute source code. Unsupported constructs must not be silently skipped.
+- Moshi (`@Json(name=)`) usage will be checked in team codebases during M0; if common, it will be included in the initial scope.
 
-## Offline, guvenlik ve gizlilik
+## Offline, security, and privacy
 
-- Yonetim UI/API yalnizca loopback'te dinler. Mock listener varsayilan olarak `127.0.0.1`'e bind edilir; LAN erisimi acik kullanici secimiyle acilir.
-- Model uretimi ve mock calistirma ag baglantisi gerektirmez.
-- AI'a hicbir veri kullanici aksiyonu ve gorunur onay olmadan gonderilmez.
-- Request loglarinda Authorization, cookie ve API key basliklari maskelenir; body kaydi varsayilan kapalidir.
-- Kullanici model kodu, import edilen JSON veya prompt hicbir sekilde shell komutu olarak calistirilmaz.
-- Telemetri yoktur.
+- The management UI/API listens only on loopback. The mock listener binds to `127.0.0.1` by default; LAN access is enabled only through an explicit user choice.
+- Model generation and mock execution require no network connection.
+- No data is sent to AI without a user action and visible confirmation.
+- Authorization, cookie, and API key headers are masked in request logs; body logging is off by default.
+- User model code, imported JSON, and prompts are never executed as shell commands.
+- No telemetry.
 
-## Lisans ve maliyet
+## License and cost
 
-- Arac ve tum calisma zamani bagimliliklari ucretsiz ve acik kaynak lisanslidir.
-- Mockoon paketlerinin MIT lisans metni dagitimda korunur; "Mockoon" markasi urun adinda veya logosunda kullanilmaz.
-- Ucretli bir hizmet veya AI CLI paketlenmez. AI kullanimi kullanicinin kendi lisansiyla olur.
-- Kisisel acik kaynak projedir (MIT); hicbir sirketle baglantisi yoktur ve GitHub'da yayinlanacaktir (kullanici karari, 2026-11-08). Depoda firma veya musteri kodu, adi ya da verisi bulunmaz.
+- The tool and all runtime dependencies are free and open source licensed.
+- Mockoon package MIT license texts are preserved in distribution; the "Mockoon" brand is not used in the product name or logo.
+- No paid service or AI CLI is bundled. AI use is covered by the user's own license.
+- This is a personal open source project (MIT); it is not affiliated with any company and will be published on GitHub (user decision, 2026-11-08). The repository contains no company or customer code, names, or data.
 
-## MVP kabul kriterleri
+## MVP acceptance criteria
 
-- Bir Kotlin Gson, bir Kotlinx Serialization ve bir Swift Codable modelinden (generic wrapper dahil) semaya uygun JSON uretilir.
-- Naming strategy ve tarih formati ayarlari uretilen JSON'a dogru yansir.
-- UI'da project, birden fazla collection ve endpoint olusturulur; endpoint basina birden fazla senaryo tutulur.
-- Aktif collection'lar tek port uzerinden calisir; cakisan method/path acik hata verir.
-- Body/status/header/senaryo degisikligi restart gerektirmeden yansir; bozuk JSON kaydedilmez.
-- Android Emulator (`10.0.2.2`) ve iOS Simulator (`localhost`) dogru response'u alir.
-- Mock dosyasi Mockoon desktop ile acildiginda route'lar ve response'lar korunmus olur.
-- `serve` komutu UI olmadan ayni dosyayi calistirir.
-- Tum bu akislar AI ve ag baglantisi olmadan calisir.
+- Schema-compliant JSON is generated from one Kotlin Gson, one Kotlinx Serialization, and one Swift Codable model (including a generic wrapper).
+- Naming strategy and date format settings are correctly reflected in generated JSON.
+- A project, multiple collections, and endpoints can be created in the UI; multiple scenarios can be stored per endpoint.
+- Active collections run on a single port; conflicting method/path pairs produce an explicit error.
+- Body/status/header/scenario changes take effect without a restart; invalid JSON cannot be saved.
+- Android Emulator (`10.0.2.2`) and iOS Simulator (`localhost`) receive the correct response.
+- Routes and responses are preserved when the mock file is opened in Mockoon desktop.
+- The `serve` command runs the same file without the UI.
+- All these workflows work without AI or a network connection.
 
-## MVP disi
+## Out of MVP scope
 
-- Online ekip senkronizasyonu, hesap sistemi.
-- Stateful CRUD backend davranisi (Mockoon'un data bucket ozellikleri dosyada korunur ama UI'da yonetilmez).
-- Request'e gore response kurallari, proxy ve sablonlama icin UI (Mockoon desktop ile ayni dosya uzerinden kullanilabilir). Kurallar icin UI v1'de planlandi (FR-40).
-- Sealed class/polymorphism, custom serializer ve kalitim destegi. Sealed class ve kalitim v1'de planlandi (FR-55); custom serializer kapsam disi kalir.
-- UI icinden AI CLI cagrisi (MCP sonrasi).
-- Kendi Node.js kurulumunu yapan bootstrap, tek binary veya Docker dagitimi. Node kurulumu ve guncelleme v1'de planlandi (FR-50).
-- Varsayilan acik LAN erisimi.
+- Online team synchronization, account system.
+- Stateful CRUD backend behavior (Mockoon's data bucket features are preserved in the file but are not managed in the UI).
+- UI for request-based response rules, proxying, and templating (can be used with the same file through Mockoon desktop). UI for rules is planned for v1 (FR-40).
+- Sealed classes/polymorphism, custom serializers, and inheritance support. Sealed classes and inheritance are planned for v1 (FR-55); custom serializers remain out of scope.
+- AI CLI calls from the UI (after MCP).
+- Bootstrap that installs its own Node.js, single binary, or Docker distribution. Node installation and updates are planned for v1 (FR-50).
+- LAN access enabled by default.
 
-## Uygulama notlari
+## Implementation notes
 
-Gereksinimlerin uygulamada nasil yorumlandigi; kanitlar [Roadmap](ROADMAP.md) dosyasindadir.
+How requirements are interpreted in the implementation; evidence is in the [Roadmap](ROADMAP.md) file.
 
-- FR-05: Path parametre adlari cakisma kontrolunde onemsizdir (`/users/:id` ile `/users/:userId` ayni route'tur). Daha once gelen parametreli route'un sonradan gelen sabit route'u golgelemesi (`/users/:id` ve `/users/me`) hata degil uyari olarak raporlanir.
-- FR-12: CORS `wildcard` (`*`) veya `reflect` (istegin origin'i, `Allow-Credentials: true`, `Vary: Origin`) modunda yapilandirilir.
-- FR-27: Endpoint'e bagli model, yalnizca 2xx senaryolarinin body'sini dogrular; 4xx/5xx hata response'lari kendi seklini tasir ve basarili response modeline gore denetlenmez. Ihlaller UI'da uyari, `save_scenario` ve `check` icinde hata olarak gorunur.
-- FR-31: UI icinden AI CLI uretimi `mock-studio ui --ai copilot` ile acilir; prompt opsiyoneldir; her gonderim onizleme ve onay gerektirir.
-- Kapsam eki: Moshi `@Json(name, ignore)` ilk parser kapsamindadir; typealias ve recursive tipler desteklenir.
-- Kapsam eki (guvenlik): Mockoon templating, data bucket, callback ve CRUD/WebSocket route'lari varsayilan olarak calistirilmaz (guvenli mod); proje ayarindan acikca acilabilir.
-- M5 ile gelenler: eslesmeyen istekler icin gercek backend'e proxy (kapali baslar), model degisikligi kontrolu (`check`), OpenAPI export.
+- FR-05: Path parameter names are ignored in duplicate checks (`/users/:id` and `/users/:userId` are the same route). A later static route shadowed by an earlier parameterized route (`/users/:id` and `/users/me`) is reported as a warning, not an error.
+- FR-12: CORS is configured in `wildcard` (`*`) or `reflect` (request origin, `Allow-Credentials: true`, `Vary: Origin`) mode.
+- FR-27: The model associated with an endpoint validates only the bodies of 2xx scenarios; 4xx/5xx error responses have their own shape and are not checked against the success response model. Violations appear as warnings in the UI and as errors in `save_scenario` and `check`.
+- FR-31: AI CLI generation from the UI is launched with `mock-studio ui --ai copilot`; the prompt is optional; every submission requires preview and confirmation.
+- Scope addition: Moshi `@Json(name, ignore)` is included in the initial parser scope; typealias and recursive types are supported.
+- Scope addition (security): Mockoon templating, data buckets, callbacks, and CRUD/WebSocket routes are not run by default (safe mode); they can be explicitly enabled in project settings.
+- Added in M5: proxy unmatched requests to the real backend (starts disabled), model change check (`check`), OpenAPI export.

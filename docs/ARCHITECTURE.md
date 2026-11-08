@@ -1,250 +1,250 @@
-# Mimari ve Guvenlik
+# Architecture and Security
 
-## Tasarim hedefleri
+## Design goals
 
-- Tek kullanicili, local-first ve offline calisan bir gelistirme araci.
-- Mock calistirmayi yeniden yazmamak: Mockoon motoru kutuphane olarak kullanilir.
-- Ayirt edici is (model parser, schema, uretim) motordan bagimsiz moduller olarak tutulur.
-- Veri, Mockoon ile uyumlu ve git'e konabilen dosyalarda saklanir.
-- Kullanici girdisi kod olarak calistirilmaz.
+- A single-user, local-first development tool that works offline.
+- Do not rewrite mock execution: use the Mockoon engine as a library.
+- Keep the distinctive work (model parser, schema, generation) in engine-independent modules.
+- Store data in files that are compatible with Mockoon and can be committed to git.
+- Never execute user input as code.
 
-## Karar kaydi
+## Decision log
 
-| Secenek | Karar | Gerekce |
+| Option | Decision | Rationale |
 |---|---|---|
-| Sifirdan mock server (Fastify) | Reddedildi | Path param, senaryo, latency, proxy, CORS, HTTPS, log gibi ozellikler Mockoon motorunda hazir. |
-| Mockoon fork'u | Reddedildi | Angular/Electron bakim yuku, aktif upstream ile surekli merge, Electron uygulamasi icin ucretli kod imzalama/notarization, marka temizligi. Ayirt edici is fork'ta da ayni sekilde yazilacakti. |
-| Mockoon eklentisi | Mumkun degil | Mockoon desktop'ta plugin/extension sistemi yok. |
-| Mockoon motorunu kullanan bagimsiz npm paketi | **Secildi** | MIT, imzalama gerektirmez, `npx` ile her OS ve CI'da calisir, Mockoon desktop/CLI ile ayni dosyayi paylasir. |
+| Build a mock server from scratch (Fastify) | Rejected | The Mockoon engine already provides path parameters, scenarios, latency, proxy, CORS, HTTPS, and logging. |
+| Fork Mockoon | Rejected | Angular/Electron maintenance burden, continuous merges with upstream, paid code signing/notarization for an Electron app, and brand cleanup. The distinctive work would still have to be written in the fork. |
+| Mockoon plugin | Not possible | Mockoon Desktop has no plugin/extension system. |
+| Standalone npm package using the Mockoon engine | **Selected** | MIT, no signing required, runs on every OS and in CI with `npx`, and shares the same file with Mockoon Desktop/CLI. |
 
-Riskler:
+Risks:
 
-- `@mockoon/commons-server` resmi olarak genel kullanima yonelik stabil bir API garantisi vermez. Surum exact pin'lenir, entegrasyon testleriyle korunur ve guncelleme kontrollu yapilir.
-- Mockoon dosya formati degisirse migration Mockoon paketleriyle gelir; arac kendi yan dosyasinin formatini ayrica version'lar.
+- `@mockoon/commons-server` does not officially guarantee a stable API for general use. Pin the exact version, protect it with integration tests, and update it in a controlled manner.
+- If the Mockoon file format changes, migrations come with Mockoon packages; the tool versions its own sidecar file format separately.
 
-## Bilesenler
+## Components
 
 ```mermaid
 graph LR
-  subgraph pkg[npm paketi]
+  subgraph pkg[npm package]
     CLI[CLI: serve / generate / ui / mcp]
-    UI[Yerel web UI] --> Control[Control API - loopback]
+    UI[Local web UI] --> Control[Control API - loopback]
     CLI --> Control
     MCP[MCP server - stdio] --> Core
     Control --> Core[Core]
-    Core --> Store[Dosya katmani]
-    Core --> Parser[Parser adapter'lari]
-    Parser --> Schema[Ortak JSON Schema]
-    Schema --> Gen[Yerel uretici]
-    Schema --> Val[Schema dogrulama]
-    Core --> AiCli[Opsiyonel AI CLI adapter]
+    Core --> Store[File layer]
+    Core --> Parser[Parser adapters]
+    Parser --> Schema[Shared JSON Schema]
+    Schema --> Gen[Local generator]
+    Schema --> Val[Schema validation]
+    Core --> AiCli[Optional AI CLI adapter]
     Core --> Runtime[Mock runtime]
   end
   Runtime --> Engine["@mockoon/commons-server"]
-  Store --> Files[(Mockoon environment JSON + yan dosya)]
-  Desktop[Mockoon desktop - opsiyonel] --> Files
+  Store --> Files[(Mockoon environment JSON + sidecar)]
+  Desktop[Mockoon Desktop - optional] --> Files
   Mobile[Android / iOS / KMP / WebView] --> Engine
   Agent[Kiro / Copilot] --> MCP
 ```
 
-- **CLI:** `init` (proje olusturur), `ui` (yerel web UI'i acar), `serve` (mock'lari UI olmadan calistirir), `generate` (modelden JSON uretir, istenirse projeye senaryo olarak kaydeder), `check` (bagli modelleri kaynakla karsilastirir), `export openapi`, `snippets` (baglanti rehberi) ve `mcp` (MCP server'i stdio uzerinden baslatir).
-- **Yerel web UI:** React + TypeScript + Vite. Collection yonetimi, endpoint ve senaryo duzenleme, modelden uretim, start/stop ve loglar. Ileri route kurallari, proxy ve sablonlama icin Mockoon desktop ayni dosya ile kullanilabilir.
-- **Control API:** Fastify; UI asset'lerini sunar ve yonetim API'sini verir. Yalnizca loopback.
-- **Core:** Domain modeli, cakisma kontrolu, dosya okuma/yazma, runtime yonetimi. UI, CLI ve MCP ayni core'u kullanir.
-- **Mock runtime:** Aktif collection'lardan bir Mockoon environment'i olusturur ve `@mockoon/commons-server` ile calistirir.
-- **Parser adapter'lari:** Gson, Kotlinx Serialization ve Swift Codable icin ayri adapter'lar; ortak AST katmani (aday: tree-sitter WASM grammar'lari).
-- **Yerel uretici:** Alan adi heuristic'leri ile deterministik veri; varyant uretimi.
-- **AI:** MCP server birincil entegrasyon; AI CLI adapter'i sonraki asama.
+- **CLI:** `init` (creates a project), `ui` (opens the local web UI), `serve` (runs mocks without the UI), `generate` (generates JSON from a model and optionally saves it to the project as a scenario), `check` (compares linked models with their sources), `export openapi`, `snippets` (connection guide), and `mcp` (starts the MCP server over stdio).
+- **Local web UI:** React + TypeScript + Vite. Collection management, endpoint and scenario editing, model-based generation, start/stop, and logs. Mockoon Desktop can be used with the same file for advanced route rules, proxy, and templating.
+- **Control API:** Fastify; serves UI assets and exposes the management API. Loopback only.
+- **Core:** Domain model, conflict detection, file reads/writes, and runtime management. The UI, CLI, and MCP all use the same core.
+- **Mock runtime:** Creates a Mockoon environment from active collections and runs it with `@mockoon/commons-server`.
+- **Parser adapters:** Separate adapters for Gson, Kotlinx Serialization, and Swift Codable; a shared AST layer (candidate: tree-sitter WASM grammars).
+- **Local generator:** Deterministic data using field-name heuristics; variant generation.
+- **AI:** The MCP server is the primary integration; the AI CLI adapter is a later phase.
 
-## Veri modeli ve dosyalar
+## Data model and files
 
-Bir project, kullanicinin sectigi klasorde (or. mobil app reposunda `mocks/`) tutulur:
+A project is stored in a folder chosen by the user (e.g. `mocks/` in a mobile app repository):
 
-- **Mockoon environment dosyasi** (`<ad>.environment.json`): Route'lar, response'lar (senaryolar), header'lar, latency, CORS, port ve hostname. Mockoon CLI ile dogrudan calisir. Bu dosya port, hostname, CORS ve proxy ayarlarinin tek kaynagidir.
-- **Yan dosya** (`<ad>.studio.json`, `schemaVersion: 1`): Araca ozel metadata. `environmentFile` (ayni klasorde duz dosya adi), collection aktif/pasif durumlari (folder uuid'si ile), endpoint basina model baglantisi (`rootType`, naming/tarih ayarlari, kaynak dosyalar, JSON Schema), CORS modu, uretim varsayilanlari, `logBodies` ve `allowTemplating`. Kaynak dosya yollari yan dosyanin bulundugu proje klasorune gore goreli yazilir (`../app/Order.kt` gibi; mutlak yol yazilmaz) ve okunurken `--root` (varsayilan: proje klasoru) icinde kalmalidir; proje klasoru disindaki modeller icin `ui`, `check` ve `mcp` `--root <repo koku>` ile baslatilir. Semadan konum bilgisi (`x-source`) cikarilir.
+- **Mockoon environment file** (`<name>.environment.json`): Routes, responses (scenarios), headers, latency, CORS, port, and hostname. Runs directly with the Mockoon CLI. This file is the single source of truth for port, hostname, CORS, and proxy settings.
+- **Sidecar file** (`<name>.studio.json`, `schemaVersion: 1`): Tool-specific metadata. `environmentFile` (plain filename in the same folder), collection active/inactive states (using folder UUIDs), model links per endpoint (`rootType`, naming/date settings, source files, JSON Schema), CORS mode, generation defaults, `logBodies`, and `allowTemplating`. Source file paths are written relative to the project folder containing the sidecar (e.g. `../app/Order.kt`; absolute paths are not written) and must remain inside `--root` when read (`--root` defaults to the project folder); for models outside the project folder, start `ui`, `check`, and `mcp` with `--root <repo root>`. Location information (`x-source`) is removed from the schema.
 
-Eslesme:
+Mapping:
 
-| Urun kavrami | Mockoon karsiligi (M0'da dogrulandi) |
+| Product concept | Mockoon equivalent (verified in M0) |
 |---|---|
-| Project | Environment (tek port) |
-| Collection | Kok seviyedeki folder; folder disindaki route'lar "Ungrouped" sanal collection'i |
-| Endpoint | Route (`http` tipi; CRUD/WebSocket route'lari salt okunur gosterilir) |
-| Senaryo | Route response; `label` = ad, `default` = aktif senaryo |
-| Latency, status, header, body | Route response alanlari |
+| Project | Environment (single port) |
+| Collection | Top-level folder; routes outside folders appear in the virtual "Ungrouped" collection |
+| Endpoint | Route (`http` type; CRUD/WebSocket routes are shown read-only) |
+| Scenario | Route response; `label` = name, `default` = active scenario |
+| Latency, status, header, body | Route response fields |
 
-Kurallar:
+Rules:
 
-- Body ham string olarak saklanir ve oldugu gibi sunulur; dogrulama icin ayri parse edilir.
-- Yazma islemleri atomiktir (gecici dosya + rename). Dosya izleme ile dis degisiklikler (git pull, Mockoon desktop) algilanir; kaydedilmemis degisiklikle cakisirsa kullaniciya sorulur.
-- Kalici ID'ler korunur; JSON pretty-print ve kararli alan sirasi ile yazilir (git diff okunabilirligi).
-- Yan dosyada bilinmeyen gelecek major `schemaVersion` sessizce yuklenmez.
-- Dosyalar absolute path, kullanici adi, credentials veya token icermez.
+- Bodies are stored as raw strings and served as-is; they are parsed separately for validation.
+- Writes are atomic (temporary file + rename). File watching detects external changes (git pull, Mockoon Desktop); if there is an unsaved-change conflict, the user is prompted.
+- Persistent IDs are preserved; files are written with JSON pretty-printing and stable field order (for readable git diffs).
+- An unknown future major `schemaVersion` in the sidecar is not loaded silently.
+- Files do not contain absolute paths, usernames, credentials, or tokens.
 
-## Route cozumu ve collection birlestirme
+## Route resolution and collection merging
 
-- Mockoon motoru ilk eslesen route'u secer; cakismayi kendisi raporlamaz. Bu yuzden cakisma kontrolu core'da, runtime'a gecmeden once yapilir.
-- Cakisma, normalize edilmis method + path uzerinden kontrol edilir; parametreli path'lerde (`/users/:id` ile `/users/me`) olasi golgeleme uyari olarak gosterilir.
-- Collection aktif edildiginde veya endpoint degistiginde kontrol tekrar calisir.
-- Pasif collection'larin route'lari runtime'a verilmez: runtime, dosyadaki environment'tan route'lari cikararak turetilmis bir environment kurar; dosya degismez (Mockoon desktop tum route'lari gosterir).
-- Degisiklikler restart gerektirmeden `MockoonServer.updateEnvironment()` ile yansir. Yalniz port veya host degisirse runtime sunucuyu durdurup yeni adresle yeniden baslatir.
-- Eslesmeyen istekler icin yontem: motor 404'u kendisi JSON yapmadigi icin turetilmis environment'a, OPTIONS haric her method icin bir catch-all route (`{*splat}`) eklenir; OPTIONS haric tutulur cunku preflight'i motorun CORS isleyicisi karsilar. Bu route'larin uuid'leri log'da "eslesmedi" isareti olarak kullanilir. Proxy acikken catch-all eklenmez.
-- Collection sirasi ve folder icindeki endpoint sirasi motorun route onceligidir; cakisma kontrolu bu sirayi kullanir.
+- The Mockoon engine selects the first matching route and does not report conflicts. Therefore, the core checks for conflicts before passing routes to the runtime.
+- Conflicts are checked using normalized method + path; possible shadowing in parameterized paths (such as `/users/:id` and `/users/me`) is shown as a warning.
+- The check runs again when a collection is activated or an endpoint is changed.
+- Routes from inactive collections are not passed to the runtime: the runtime builds a derived environment by removing routes from the environment in the file; the file is unchanged (Mockoon Desktop shows all routes).
+- Changes are applied without a restart via `MockoonServer.updateEnvironment()`. If only the port or host changes, the runtime stops the server and restarts it at the new address.
+- For unmatched requests: because the engine does not return JSON for 404s on its own, a catch-all route (`{*splat}`) is added to the derived environment for every method except OPTIONS. OPTIONS is excluded because the engine's CORS handler handles preflight requests. These routes' UUIDs are used as an "unmatched" marker in logs. No catch-all is added when the proxy is enabled.
+- Collection order and endpoint order within a folder determine the engine's route priority; conflict checks use this order.
 
-## Modelden schema'ya donusum
+## Converting models to schemas
 
-1. Kullanici `.kt`/`.swift` dosyasi, klasor secer veya kod yapistirir.
-2. Uygun adapter AST uzerinden tipleri cikarir; dosya derlenmez ve calistirilmaz.
-3. Tipler ortak JSON Schema'ya cevrilir: nullable/optional, default degerler, enum, liste, map, nested type, basit generic'ler ve JSON alan adlari.
-4. Uretim ayarlari uygulanir: naming strategy, tarih formati, `Long` icin guvenli sayi araligi.
-5. Yerel uretici deterministik ornek ve istenen varyantlari uretir.
-6. Cikti JSON parse ve schema validation'dan gecer, endpoint senaryosu olarak kaydedilir.
+1. The user selects `.kt`/`.swift` files or folders, or pastes code.
+2. The appropriate adapter extracts types from the AST; files are not compiled or executed.
+3. Types are converted to a shared JSON Schema: nullable/optional values, default values, enums, lists, maps, nested types, simple generics, and JSON field names.
+4. Generation settings are applied: naming strategy, date format, safe number range for `Long`.
+5. The local generator creates deterministic samples and the requested variants.
+6. The output is parsed as JSON and validated against the schema, then saved as an endpoint scenario.
 
-Schema dogrulamasi decoder uyumlulugunu garanti etmez; en buyuk risk naming ve tarih stratejileridir. Bu ayarlar UI'da gorunur ve yan dosyada saklanir.
+Schema validation does not guarantee decoder compatibility; naming and date strategies are the greatest risks. These settings are visible in the UI and stored in the sidecar.
 
-JSON Schema Draft 2020-12 kullanilir; parser `web-tree-sitter` 0.24.7 ile `tree-sitter-wasms` 0.1.13'tur. Regex ile kismi parse yapilmaz; hata konumu ve desteklenmeyen yapilar raporlanir.
+JSON Schema Draft 2020-12 is used; the parser uses `web-tree-sitter` 0.24.7 and `tree-sitter-wasms` 0.1.13. Partial parsing with regex is not used; error locations and unsupported constructs are reported.
 
-## AI entegrasyonu
+## AI integration
 
-### MCP server (birincil)
+### MCP server (primary)
 
-- Stdio uzerinden calisir; ag portu acmaz. Stdout yalnizca protokole aittir.
-- Tool'lar dar kapsamlidir: `list_collections`, `parse_model`, `get_schema`, `generate_sample` (deterministik taslak), `validate_body`, `save_scenario`.
-- Dosya erisimi `--root` (varsayilan: proje klasoru) ile sinirlidir; `..`, mutlak yol ve symlink ile cikis reddedilir. Yazma yalnizca proje dosyalarina, `ProjectService` uzerinden yapilir; shell veya keyfi dosya yazma tool'u yoktur.
-- `save_scenario` body'yi verilen modele veya endpoint'e bagli modele gore dogrular (bagli model yalnizca 2xx senaryolari icin gecerlidir; 404/500 gibi hata response'lari basarili response modeline gore denetlenmez); gecersiz body ve gecersiz JSON kaydedilmez.
-- Veri gonderim onayi AI istemcisinin (Kiro, Copilot) kendi onay akisiyla yapilir.
+- Runs over stdio; it does not open a network port. Stdout is reserved for the protocol.
+- Tools have a narrow scope: `list_collections`, `parse_model`, `get_schema`, `generate_sample` (deterministic draft), `validate_body`, and `save_scenario`.
+- File access is restricted by `--root` (defaults to the project folder); escapes via `..`, absolute paths, and symlinks are rejected. Writes are limited to project files and go through `ProjectService`; there is no shell or arbitrary-file-write tool.
+- `save_scenario` validates the body against the model provided or the model linked to the endpoint (a linked model applies only to 2xx scenarios; error responses such as 404/500 are not checked against the success response model); invalid bodies and invalid JSON are not saved.
+- Approval to send data is handled through the AI client's (Kiro, Copilot) own approval flow.
 
 ### AI CLI adapter
 
-- Provider interface'i (`AiProvider`) disinda belirli bir CLI'a bagimlilik olmaz; su an tek provider GitHub Copilot CLI'dir. Yalnizca `mock-studio ui --ai copilot` ile acilir ve proje dosyasinda saklanmaz (repoda paylasilan bir dosya, bir CLI'i calistirmaya yonlendirememelidir).
-- Yalnizca kullanicinin Generate aksiyonuyla cagrilir; gonderilecek prompt (JSON Schema, istege bagli kullanici istegi ve istege bagli model kaynagi) once tam metin olarak gosterilir; onay, onizlenen promptun hash'i ile verilir ve prompt degisirse reddedilir.
-- CLI'lar agent oldugu icin bos bir gecici calisma dizininde, bos bir gecici yapilandirma klasoruyle (`--config-dir`; kullanicinin MCP sunuculari, hook'lari ve eklentileri yuklenmez), arac listesi bosaltilmis ve `shell`/`write` reddedilmis olarak baslatilir. Model kaynagindaki yorumlar prompt injection riski tasir: kaynak veri olarak isaretlenir, CLI'in araci yoktur ve cevap semaya gore dogrulanir.
-- Shell string interpolation yoktur; prompt tek argv elemanidir. Ortam degiskenleri izin listesiyle aktarilir (`PATH`, `HOME`, proxy ayarlari, `COPILOT_*`, `GH_*`, `GITHUB_*`...).
-- Timeout (varsayilan 120 sn), iptal (istemci baglantisi koparsa process oldurulur), cikis kodu, 2 MB cikti siniri ve stdout JSON dogrulamasi ele alinir; basarisizlikta yerel uretici kullanilir.
-- CLI paketlenmez; kullanicinin kendi kurulumu ve lisansi kullanilir.
+- There is no dependency on a specific CLI beyond the provider interface (`AiProvider`); currently, GitHub Copilot CLI is the only provider. It is enabled only with `mock-studio ui --ai copilot` and is not stored in the project file (a file shared in a repository must not direct a CLI to run).
+- It is called only when the user selects Generate; the prompt to be sent (JSON Schema, optional user request, and optional model source) is first shown as full text; approval is tied to the hash of the previewed prompt and is rejected if the prompt changes.
+- Because CLIs are agents, they are started in an empty temporary working directory with an empty temporary configuration directory (`--config-dir`; the user's MCP servers, hooks, and extensions are not loaded), an empty tool list, and `shell`/`write` disabled. Comments in model sources pose a prompt-injection risk: sources are marked as data, the CLI has no tools, and its response is validated against the schema.
+- No shell string interpolation; the prompt is a single argv element. Environment variables are passed through an allowlist (`PATH`, `HOME`, proxy settings, `COPILOT_*`, `GH_*`, `GITHUB_*`...).
+- Timeout (default 120 sec), cancellation (the process is killed if the client connection drops), exit code, 2 MB output limit, and stdout JSON validation are handled; the local generator is used on failure.
+- The CLI is not bundled; the user's own installation and license are used.
 
-## Mobil istemci baglantisi
+## Mobile client connectivity
 
-- Android Emulator: `http://10.0.2.2:<port>`. Mock listener `127.0.0.1`'de dinlerken de calisir.
+- Android Emulator: `http://10.0.2.2:<port>`. Works even when the mock listener is bound to `127.0.0.1`.
 - iOS Simulator: `http://localhost:<port>`.
-- Android fiziksel cihaz: `adb reverse tcp:<port> tcp:<port>` ile LAN acmadan `localhost`.
-- iOS fiziksel cihaz: LAN binding acik kullanici secimiyle acilir; makinenin LAN IP'si kullanilir.
-- Android cleartext: targetSdk 28+ icin debug source set'te `network_security_config` ile yerel adreslere izin verilmelidir.
-- iOS ATS: debug `Info.plist` icinde `NSAllowsLocalNetworking` gerekebilir.
-- Arac bu debug yapilandirma snippet'lerini dokumante eder veya uretir; production yapilandirmasi degistirilmez.
+- Physical Android device: use `adb reverse tcp:<port> tcp:<port>` to use `localhost` without opening the LAN.
+- Physical iOS device: LAN binding is enabled by an explicit user choice; use the machine's LAN IP.
+- Android cleartext: for targetSdk 28+, local addresses must be allowed in the debug source set with `network_security_config`.
+- iOS ATS: `NSAllowsLocalNetworking` may be required in the debug `Info.plist`.
+- The tool documents or generates these debug configuration snippets; production configuration is not changed.
 
 ## CORS
 
-- Native Android/iOS HTTP istemcileri CORS'a tabi degildir.
-- CORS gereken senaryolar: WebView, KMP web/wasm hedefleri, browser istemcileri ve yerel UI'dan mock endpoint denemek.
-- Motorun CORS ve OPTIONS preflight destegi kullanilir. Credentials iceren isteklerde `*` yerine origin yansitma kullanilir.
+- Native Android/iOS HTTP clients are not subject to CORS.
+- Scenarios that require CORS: WebView, KMP web/wasm targets, browser clients, and trying mock endpoints from the local UI.
+- The engine's CORS and OPTIONS preflight support is used. For requests with credentials, reflect the origin instead of using `*`.
 
-## Guvenlik varsayilanlari
+## Security defaults
 
-- Control API yalnizca `127.0.0.1`'e bind edilir; Host/Origin kontrolu ve kisa omurlu yerel token ile korunur (DNS rebinding'e karsi).
-- Mock listener varsayilan `127.0.0.1`; LAN binding yalnizca acik kullanici secimiyle.
-- Dosya islemleri secili project klasoruyle sinirlidir; path traversal reddedilir. Import edilen dosyalar boyut, tip ve sema acisindan dogrulanir.
-- Request loglarinda Authorization, cookie ve API key basliklari maskelenir; body loglama varsayilan kapalidir.
-- Telemetri yoktur; model kaynagi, prompt veya body hicbir servise otomatik gonderilmez.
-- **Control API ayrintilari:** `Host` basligi `127.0.0.1:<port>` veya `localhost:<port>` olmali; varsa `Origin` ayni adreslerden biri olmali; `/api/*` icin `Authorization: Bearer <token>` zorunludur (sabit sureli karsilastirma, 8 saat omur); CORS basligi yoktur; `Content-Security-Policy`, `X-Frame-Options`, `nosniff`. Token URL fragment'i ile UI'a verilir (sunucuya gitmez) ve yalniz sekme oturumunda tutulur.
-- **Guvenli mod (varsayilan):** Mockoon templating helper'lari, data bucket'lar, callback'ler ve CRUD/WebSocket route'lari paylasilan bir dosyadan kod calistirabilir (`@faker-js/faker` `helpers.fake` icin yuksek siddetli advisory'si acik; Mockoon paketleri bu surume bagli). Bu yuzden runtime, proje `allowTemplating` ile acik izin vermedikce bunlari kapatir: tum response'larda `disableTemplating`, callback ve data bucket'lar bos, template soz dizimi iceren header degerleri oldugu gibi (escape edilerek) sunulur, `templating`/`data_bucket`/`global_var` kurallari yok sayilir, data bucket body'si 501 doner. Dosyanin kendisi degismez; UI ve `view` neyin kapatildigini listeler. Arac kendi catch-all 404 route'larinda ve CORS origin yansitma header'inda kendi sabit template'lerini kullanir.
-- **Proxy:** Varsayilan kapali. Acikken eslesmeyen istekler (Authorization ve cookie dahil) girilen backend'e iletilir; adres `http(s)` olmali, kimlik bilgisi icermemeli ve mock sunucunun kendisini gostermemeli.
-- **Model baglantilari** istemciden gelir: kaynak konumlari (`x-source`) cikarilir, mutlak veya `..` iceren yollar atilir, sema boyutu sinirlanir.
-- Parser kaynak kodu calistirmaz ve ayri bir process'te calisir; cokmesi ana sureci etkilemez, 30 sn zaman asimi, dosya basina 1 MB ve en fazla 500 dosya siniri vardir.
+- The Control API binds only to `127.0.0.1`; it is protected by Host/Origin checks and a short-lived local token (against DNS rebinding).
+- The mock listener defaults to `127.0.0.1`; LAN binding requires an explicit user choice.
+- File operations are restricted to the selected project folder; path traversal is rejected. Imported files are validated for size, type, and schema.
+- Authorization, cookie, and API key headers are masked in request logs; body logging is off by default.
+- There is no telemetry; model sources, prompts, or bodies are never sent automatically to any service.
+- **Control API details:** The `Host` header must be `127.0.0.1:<port>` or `localhost:<port>`; if present, `Origin` must be one of the same addresses; `/api/*` requires `Authorization: Bearer <token>` (constant-time comparison, 8-hour lifetime); there is no CORS header; `Content-Security-Policy`, `X-Frame-Options`, `nosniff`. The token is passed to the UI in the URL fragment (not sent to the server) and kept only for the tab session.
+- **Safe mode (default):** Mockoon templating helpers, data buckets, callbacks, and CRUD/WebSocket routes can execute code from a shared file (`@faker-js/faker` has an open high-severity advisory for `helpers.fake`; Mockoon packages depend on this version). Therefore, the runtime disables them unless explicitly allowed by the project's `allowTemplating`: `disableTemplating` on all responses, empty callbacks and data buckets, header values containing template syntax are served as-is (escaped), `templating`/`data_bucket`/`global_var` rules are ignored, and data bucket bodies return 501. The file itself is unchanged; the UI and `view` list what was disabled. The tool uses its own fixed templates in its catch-all 404 routes and CORS origin-reflection header.
+- **Proxy:** Off by default. When enabled, unmatched requests (including Authorization and cookie) are forwarded to the entered backend; the address must use `http(s)`, contain no credentials, and must not point to the mock server itself.
+- **Model links** come from the client: source locations (`x-source`) are removed, absolute paths or paths containing `..` are discarded, and schema size is limited.
+- The parser does not execute source code and runs in a separate process; a crash does not affect the main process. Limits are a 30-second timeout, 1 MB per file, and 500 files maximum.
 
-## Model degisikligi kontrolu ve OpenAPI
+## Model change checks and OpenAPI
 
-- `check` / `GET /api/models/check`: her model baglantisinin kaynak dosyalarini yeniden okur, yeni semayi kayitli semayla karsilastirir (`schema-diff`: eklenen/silinen/tipi degisen alan, zorunlu ve nullable degisiklikleri, enum degisiklikleri, tarih kodlamasi; recursive tipler icin dongu korumasi) ve kayitli body'leri yeni semaya karsi dogrular. Yapistirilarak veya yuklenerek verilen modellerin kaynak yolu olmadigi icin "kontrol edilemez" sayilir. "Yeni modeli kabul et" kayitli semayi gunceller; body'leri guncellemek kullanicidadir.
-- `export openapi`: endpoint ve senaryolardan OpenAPI 3.1 uretir; 2xx response'lari bagli modelin semasina (`components.schemas`) ve ornek body'lere baglar. Sozlesme onerisidir, otorite degildir.
+- `check` / `GET /api/models/check`: rereads the source files for each model link, compares the new schema with the saved schema (`schema-diff`: added/deleted/type-changed fields, required and nullable changes, enum changes, date encoding; cycle protection for recursive types), and validates saved bodies against the new schema. Models pasted or uploaded have no source path and are therefore considered "unchecked." "Accept new model" updates the saved schema; updating bodies is up to the user.
+- `export openapi`: generates OpenAPI 3.1 from endpoints and scenarios; links 2xx responses to the linked model's schema (`components.schemas`) and example bodies. It is a contract proposal, not an authority.
 
-## M0 teknik dogrulama sonuclari
+## M0 technical validation results
 
-Dogrulama, calisan prototipler ve sonra bunlari kapsayan testlerle yapildi (surumler exact: `@mockoon/*` 9.10.0).
+Validation used working prototypes followed by tests covering them (exact versions: `@mockoon/*` 9.10.0).
 
-- `MockoonServer(environment, options)`; olaylar `started`, `stopped`, `error` (kodlari `ServerErrorCodes`) ve `transaction-complete` (istek/response, `routeUUID`, `routeResponseUUID`, `proxied`). `updateEnvironment()` route ve response degisikliklerini restartsiz uygular; 64-bit sayilar body'de aynen korunur (body ham string'dir).
-- Ilk eslesen route kazanir; sira `rootChildren` sirasidir ve klasorler yerinde acilir (`/users/:id` once gelirse `/users/me` golgelenir).
-- `method: all` olan `{*splat}` route'u OPTIONS'i de yakalayip CORS isleyicisinin onune gecer; bu yuzden catch-all'lar method basina uretilir.
-- CORS: `environment.cors = true` yalniz OPTIONS isleyicisini acar; normal response'lardaki `Access-Control-*` header'lari `environment.headers` ile verilir. Origin yansitma: `Access-Control-Allow-Origin: {{header 'Origin'}}` + `Allow-Credentials: true` + `Vary: Origin`.
-- Mockoon migration'lari (`lastMigration` 33) yuklemede uygulanir; daha yeni `lastMigration` acik hata verir. Yukleme dogrulamasi Mockoon'un kendi `EnvironmentSchema`'sidir.
-- tree-sitter: `web-tree-sitter` 0.27, `tree-sitter-wasms` 0.1.13 ile `dylink` bicimi uyumsuzlugundan yuklenemez; 0.24.7 ile Kotlin ve Swift grammar'lari yuklenir. Node 24 ve 25'te V8'in optimize edici WASM derleyicisi bu grammar'larda bellek yetersizligiyle cokuyor (`Fatal process out of memory: Zone`, cikis kodu 133); Node 22'de yok. `--liftoff-only` sorunu cozer ama `NODE_OPTIONS` ile verilemez ve `v8.setFlagsFromString()` etkisizdir; bu yuzden parser, bu bayrakla baslatilan bir child process'tir.
-- `npm audit` (production): `@faker-js/faker` (code execution advisory'si) ve `joi` (kuadratik sureli DoS advisory'si) Mockoon paketleri uzerinden gelir; `npm audit fix` Mockoon'u eski surume dusurur ve kabul edilmez. Faker riski guvenli modla kapatilir; Mockoon guncellemesinde advisory'ler yeniden kontrol edilir.
-- Lisans taramasi (production agaci, 234 paket): hepsi izin verici lisansli; tek istisna Mockoon'un bagimliligi `@jmespath-community/jmespath` (MPL-2.0, degistirilmeden kullanilir) [NOTICE.md](../NOTICE.md) icinde belirtilir.
-- MCP SDK 1.32.2 (`registerTool`, zod 4 ile calisir); paket adi `@mock-api-studio/studio`.
+- `MockoonServer(environment, options)`; events are `started`, `stopped`, `error` (codes are `ServerErrorCodes`), and `transaction-complete` (request/response, `routeUUID`, `routeResponseUUID`, `proxied`). `updateEnvironment()` applies route and response changes without restarts; 64-bit numbers are preserved exactly in the body (the body is a raw string).
+- The first matching route wins; order follows `rootChildren`, and folders are expanded in place (if `/users/:id` comes first, it shadows `/users/me`).
+- A `{*splat}` route with `method: all` also catches OPTIONS and takes precedence over the CORS handler; therefore, catch-alls are generated per method.
+- CORS: `environment.cors = true` enables only the OPTIONS handler; `Access-Control-*` headers on normal responses are set with `environment.headers`. Origin reflection: `Access-Control-Allow-Origin: {{header 'Origin'}}` + `Allow-Credentials: true` + `Vary: Origin`.
+- Mockoon migrations (`lastMigration` 33) are applied on load; a newer `lastMigration` produces an explicit error. Loading is validated against Mockoon's own `EnvironmentSchema`.
+- tree-sitter: `web-tree-sitter` 0.27 cannot load because its `dylink` format is incompatible with `tree-sitter-wasms` 0.1.13; Kotlin and Swift grammars load with 0.24.7. On Node 24 and 25, V8's optimizing WASM compiler crashes on these grammars with an out-of-memory error (`Fatal process out of memory: Zone`, exit code 133); this does not occur on Node 22. `--liftoff-only` fixes the issue but cannot be passed with `NODE_OPTIONS`, and `v8.setFlagsFromString()` has no effect; therefore, the parser is a child process started with this flag.
+- `npm audit` (production): `@faker-js/faker` (code execution advisory) and `joi` (quadratic-time DoS advisory) come through Mockoon packages; `npm audit fix` downgrades Mockoon and is not acceptable. Safe mode mitigates the Faker risk; advisories are rechecked when Mockoon is updated.
+- License scan (production tree, 234 packages): all have permissive licenses; the only exception, Mockoon's dependency `@jmespath-community/jmespath` (MPL-2.0, used unmodified), is listed in [NOTICE.md](../NOTICE.md).
+- MCP SDK 1.32.2 (`registerTool`, works with zod 4); package name `@mock-api-studio/studio`.
 
-## Runtime ve platform
+## Runtime and platform
 
-- Kurulu Node.js gerekir; `engines` alani `>=22.12.0`'dir (Mockoon motoru Node 18+ ister, UI build araclari 22.12+ ister). Test edilenler: 22.23, 24.22 ve 25.9. Uyumsuz surumde acik hata ve kurulum yonlendirmesi verilir; arac su an Node kurmaz. 2026-11-08 karariyla bu degisecek: kurulum araci gerekirse ozel bir Node runtime kurar (bkz. [Dagitim ve guncelleme](#dagitim-ve-guncelleme), M13).
-- Hedef platformlar: macOS, Windows, Linux. Test matrisi `.github/workflows/ci.yml` icindedir (macOS ve Linux; Node 22 ve 24). macOS disinda calistirilmadi; Windows bu matriste yoktur ve acik maddedir.
-- Tek binary veya Docker dagitimi MVP sonrasi degerlendirilir.
+- Installed Node.js is required; the `engines` field is `>=22.12.0` (the Mockoon engine requires Node 18+, UI build tools require 22.12+). Tested versions: 22.23, 24.22, and 25.9. An incompatible version produces an explicit error and installation guidance; the tool does not currently install Node. This will change per the 2026-11-08 decision: if needed, the installer will install a dedicated Node runtime (see [Distribution and updates](#distribution-and-updates), M13).
+- Target platforms: macOS, Windows, Linux. The test matrix is in `.github/workflows/ci.yml` (macOS and Linux; Node 22 and 24). It has not been run outside macOS; Windows is not in this matrix and remains an open item.
+- Single-binary or Docker distribution will be evaluated after the MVP.
 
-## v1 tasarimlari (oneri)
+## v1 designs (proposal)
 
-Durum: **oneri**, uygulanmadi. Kullanici kararlari 2026-11-08'de alindi; asagidaki tasarimlar o kararlara gore yazildi ve uygulama sirasinda koddaki gercek davranisla dogrulanmalidir. Milestone ve kabul kriterleri: [Roadmap - v1 plani](ROADMAP.md#v1-plani-m6-m17).
+Status: **proposed**, not implemented. The user made the decisions on 2026-11-08; the designs below reflect those decisions and must be verified against actual code behavior during implementation. Milestones and acceptance criteria: [Roadmap - v1 plan](ROADMAP.md#v1-plan-m6-m17).
 
-### Karar kaydi eki (2026-11-08, kullanici)
+### Decision log addendum (2026-11-08, user)
 
-| Konu | Karar |
+| Topic | Decision |
 |---|---|
-| Mockoon motoru | Kabul. MIT lisansli, ucretsiz ve acik kaynak oldugu icin motor paketleri kutuphane olarak kullanilmaya devam eder. |
-| Node.js | Son kullanici urunu: Node yoksa kurulum araci kurar; kurulum ve guncelleme kolay olmalidir (M13). Onceki "arac Node kurmaz" karari bu kararla degisir. |
-| Collection paylasimi | Postman benzeri export/import plana alindi (M12). Dosya/git tabanli paylasim da devam eder. |
-| AI CLI | Makinede kurulu AI CLI'lari (Claude Code, Codex, Copilot, Gemini, Kiro CLI vb.) ile uretim (M11). |
-| Kullanim modeli | Gelistirme sirasinda LLM'ler araci MCP ile otomatik kullanir; test sirasinda kullanici dashboard'u kullanir. |
-| Lisans ve yayin | Kisisel acik kaynak proje (MIT), GitHub'da yayinlanacak. Herhangi bir sirketle baglantisi yoktur. |
+| Mockoon engine | Accepted. Since it is MIT-licensed, free, and open source, the engine packages will continue to be used as a library. |
+| Node.js | End-user product: if Node is missing, the installer installs it; installation and updates should be easy (M13). This changes the previous "the tool does not install Node" decision. |
+| Collection sharing | Postman-like export/import added to the plan (M12). File/git-based sharing also continues. |
+| AI CLI | Generation with AI CLIs installed on the machine (Claude Code, Codex, Copilot, Gemini, Kiro CLI, etc.) (M11). |
+| Usage model | During development, LLMs use the tool automatically through MCP; during testing, the user uses the dashboard. |
+| License and release | Personal open-source project (MIT), to be released on GitHub. It is not affiliated with any company. |
 
-### Kosullu response'lar
+### Conditional responses
 
-**Kavram.** Status kodu bir *kosul* degil, bir *sonuctur*: kosullar hangi **senaryonun** donecegini secer; senaryo status, header, body ve gecikmeyi birlikte tasir. Boylece "header X yoksa 401", "query `page=99` ise bos liste", "body'de `type=premium` ise farkli fiyat", "ilk istek 500, sonraki 200" gibi durumlarin hepsi ayni mekanizmayla kurulur.
+**Concept.** A status code is an *outcome*, not a *condition*: conditions select which **scenario** is returned; a scenario carries the status, headers, body, and latency together. This makes cases such as "401 if header X is missing," "empty list if query `page=99`," "different price if `type=premium` in the body," and "500 on the first request, 200 on the next" configurable through the same mechanism.
 
-**Motor eslemesi.** Mockoon'un route response kurallari kullanilir (dosyada zaten calisiyor; `@mockoon/commons` 9.10.0 tipleri):
+**Engine mapping.** Use Mockoon's route response rules (already supported in the file; `@mockoon/commons` 9.10.0 types):
 
-| Bizim kavram | Mockoon alani |
+| Our concept | Mockoon field |
 |---|---|
-| Senaryo kosullari | `RouteResponse.rules[]` (`target`, `modifier`, `value`, `operator`, `invert`) |
-| Kosullarin birlesimi | `RouteResponse.rulesOperator`: `AND` / `OR` |
-| Varsayilan senaryo | `RouteResponse.default` |
-| Endpoint modu | `Route.responseMode`: `null` (kurallar, eslesmezse varsayilan), `DISABLE_RULES` (her zaman secili senaryo), `SEQUENTIAL`, `RANDOM`, `FALLBACK` |
+| Scenario conditions | `RouteResponse.rules[]` (`target`, `modifier`, `value`, `operator`, `invert`) |
+| How conditions combine | `RouteResponse.rulesOperator`: `AND` / `OR` |
+| Default scenario | `RouteResponse.default` |
+| Endpoint mode | `Route.responseMode`: `null` (rules, default if none match), `DISABLE_RULES` (always selected scenario), `SEQUENTIAL`, `RANDOM`, `FALLBACK` |
 
-Desteklenecek hedefler: `header`, `query`, `params` (route parametresi), `body` (JSON path, or. `$.user.type` veya `user.type`; form alanlari), `cookie`, `request_number`, `method`. `templating`, `data_bucket`, `global_var` guvenli modda kapali kalir (mevcut davranis). Operatorler: `equals`, `regex`, `regex_i`, `null`, `empty_array`, `array_includes`; `valid_json_schema` data bucket gerektirdigi icin ilk surumde yok.
+Supported targets: `header`, `query`, `params` (route parameter), `body` (JSON path, e.g. `$.user.type` or `user.type`; form fields), `cookie`, `request_number`, `method`. `templating`, `data_bucket`, and `global_var` remain disabled in safe mode (current behavior). Operators: `equals`, `regex`, `regex_i`, `null`, `empty_array`, `array_includes`; `valid_json_schema` is not included in the first version because it requires a data bucket.
 
-**Secim sirasi.** Motor, kurali olan senaryolari listedeki sirayla dener; ilk eslesen doner, hicbiri eslesmezse varsayilan senaryo doner. UI'da sira suruklenebilir ve "ilk eslesen kazanir" acikca gosterilir. Uygulamada dogrulanacak: kurali olmayan senaryolarin degerlendirmede nasil ele alindigi ve `request_number` sayacinin `updateEnvironment()` sonrasi sifirlanip sifirlanmadigi.
+**Selection order.** The engine checks scenarios with rules in listed order; the first match is returned, and the default scenario is returned if none match. The UI allows reordering and clearly states "first match wins." To verify during implementation: how scenarios without rules are handled during evaluation and whether the `request_number` counter resets after `updateEnvironment()`.
 
-**Zorla secim (`X-Mock-Scenario`).** Runtime'in turettigi environment'ta (dosyaya yazilmaz) her senaryonun gizli bir kopyasi, tek kurali `header X-Mock-Scenario equals <senaryo adi veya id>` olacak sekilde listenin basina eklenir. Boylece header her kosulu ezer; log, kopyayi asil senaryo adiyla gosterir. Proje ayariyla kapatilabilir. Mobil uygulamanin debug menusu bu header'i ekleyerek ekran ekran senaryo secebilir.
+**Forced selection (`X-Mock-Scenario`).** In the environment derived by the runtime (not written to the file), a hidden copy of each scenario is added at the start of the list with one rule: `header X-Mock-Scenario equals <scenario name or id>`. This lets the header override every condition; the log displays the copy under the original scenario name. It can be disabled in project settings. The mobile app's debug menu can select scenarios screen by screen by adding this header.
 
-**"Neden bu response" gorunumu.** Log satiri secilen senaryoyu ve secilme nedenini (eslesen kural, varsayilan, sirali, zorla secim, test profili) gosterir. Once motorun olaylarinin (secilen response uuid'i vb.) ne raporladigi incelenir. Eslesen kural motordan alinamiyorsa core'da yeniden degerlendirme yalniz gosterim icindir; iki sonuc farkliysa uyari loglanir ve motor davranisi esas alinir. Bu, motorla zamanla davranis farki olusma riskine karsi bilincli bir sinirdir.
+**"Why this response" view.** A log row shows the selected scenario and why it was selected (matching rule, default, sequential, forced selection, test profile). First inspect what the engine's events report (selected response UUID, etc.). If the matching rule cannot be obtained from the engine, the core re-evaluates it for display only; if the results differ, a warning is logged and engine behavior takes precedence. This is a deliberate boundary against the risk of behavior diverging from the engine over time.
 
-**Test profilleri (M8).** Yan dosyada `profiles: { [ad]: { endpoints: { [endpointId]: { scenarioId, mode? } }, network?: {...} } }`. Profil aktifken runtime, turetilmis environment'ta ilgili route'larin varsayilan senaryosunu ve modunu degistirir (`DISABLE_RULES`); dosyadaki asil secim degismez. Ag kosullari yalniz motorun dogal destekledigi sabit gecikme ve zaman asimi ile sinirlidir; rastgele hata orani ve jitter 2026-11-08'de kapsamdan cikarildi (tekrarlanamaz testler, motor disi katman ihtiyaci).
+**Test profiles (M8).** In the sidecar: `profiles: { [name]: { endpoints: { [endpointId]: { scenarioId, mode? } }, network?: {...} } }`. When a profile is active, the runtime changes the default scenario and mode for relevant routes in the derived environment (`DISABLE_RULES`); the original selection in the file is unchanged. Network conditions are limited to fixed latency and timeout naturally supported by the engine; random failure rates and jitter were removed from scope on 2026-11-08 (they require non-repeatable tests and a layer outside the engine).
 
-### Model degisikliginde body guncelleme
+### Updating bodies when the model changes
 
-- Girdi: kayitli sema, yeni sema, senaryo body'si. Cikti: onerilen yeni body + degisiklik listesi.
-- Algoritma: body yeni semaya gore yuruyerek birlestirilir. Var olan ve hala gecerli degerler korunur; yeni zorunlu alanlar (istege bagli olarak opsiyonel alanlar da) yerel ureticiyle, alan adi heuristic'leri ve sabit seed ile uretilir; semada olmayan alanlar kaldirilir; tipi degisen veya enum disi kalan deger yeniden uretilir; nullable'dan zorunluya gecen `null` deger uretilir. Diziler eleman bazinda ayni kuralla islenir.
-- Ham body metni korunarak yazilir (64-bit sayi hassasiyeti icin degismeyen sayilarin orijinal metni saklanir).
-- Yalniz modele bagli 2xx senaryolar guncellenir; 4xx/5xx'e dokunulmaz.
-- Onay olmadan dosyaya yazilmaz (CLI `--yes`, MCP onizleme + uygulama, UI fark ekrani). Yazma ayni `STALE` korumasini kullanir.
+- Input: saved schema, new schema, scenario body. Output: suggested new body + change list.
+- Algorithm: recursively merge the body according to the new schema. Preserve existing values that remain valid; generate new required fields (and optionally optional fields) with the local generator, using field-name heuristics and a fixed seed; remove fields absent from the schema; regenerate values whose type has changed or that are outside an enum; generate a value for `null` when changing from nullable to required. Process array elements using the same rules.
+- Preserve and write the raw body text (preserve the original text of unchanged numbers for 64-bit numeric precision).
+- Update only model-linked 2xx scenarios; leave 4xx/5xx untouched.
+- Do not write to the file without approval (CLI `--yes`, MCP preview + apply, UI diff screen). Writes use the same `STALE` protection.
 
-### Yan dosya surum gecisi
+### Sidecar file version migration
 
-Profil, degisken ve endpoint modu yan dosyaya eklendiginde `schemaVersion` 2 olur. Yukleyici v1 dosyasini bellekte v2'ye kayipsiz cevirir ve ilk kaydetmede v2 olarak yazar; v2 dosyasi v1 destekleyen eski surumde mevcut "UNSUPPORTED_VERSION" hatasiyla reddedilir. Her surum gecisi fixture tabanli migration testiyle korunur.
+When profiles, variables, and endpoint mode are added to the sidecar, `schemaVersion` becomes 2. The loader converts a v1 file to v2 losslessly in memory and writes it as v2 on first save; a v2 file is rejected by an older version that supports v1 with the existing `UNSUPPORTED_VERSION` error. Each migration is protected by a fixture-based migration test.
 
-### AI provider kaydi
+### AI provider registry
 
-- MCP kurulumu: `mcp install`, istemcinin resmi komutunu (`claude mcp add`, `codex mcp add`) onayla calistirir; resmi komutu olmayan istemciler icin yalniz yapilandirma parcasi gosterilir, istemci dosyalari dogrudan duzenlenmez.
-- `AiProvider` arayuzu genisletilir: `detect()` (yalniz `PATH` taramasi ve `--version`), `buildInvocation(prompt)` (argv, env izin listesi, gecici config/cwd), `parseOutput()`. Provider'lar: `claude`, `codex`, `copilot`, `gemini`, `kiro-cli`.
-- Her provider icin etkilesimsiz bayraklar, arac/izin kapatma ve izole yapilandirma secenekleri uygulama sirasinda o CLI'in guncel dokumanindan dogrulanir; varsayim yazilmaz. Izolasyon saglanamayan provider "sinirli" olarak gosterilir.
-- Mevcut kurallar tum provider'lar icin aynen gecerlidir: onizleme + hash'li onay, shell yok, prompt tek argv elemani, timeout, cikti siniri, sema dogrulamasi, yerel uretime donus.
-- Not (2026-11-08, bu makinede `command -v`): `claude`, `codex`, `copilot`, `gemini` mevcut; `kiro-cli` yok (`kiro` IDE baslaticisi var, CLI degil).
+- MCP setup: `mcp install` runs the client's official command (`claude mcp add`, `codex mcp add`) after approval; for clients without an official command, it shows only a configuration snippet and does not directly edit client files.
+- Extend the `AiProvider` interface: `detect()` (scan `PATH` only and run `--version`), `buildInvocation(prompt)` (argv, environment allowlist, temporary config/cwd), `parseOutput()`. Providers: `claude`, `codex`, `copilot`, `gemini`, `kiro-cli`.
+- For each provider, non-interactive flags, tool/permission disabling, and isolated configuration options are verified against that CLI's current documentation during implementation; no assumptions are written down. Providers for which isolation cannot be ensured are shown as "limited."
+- Existing rules apply unchanged to all providers: preview + hashed approval, no shell, prompt as a single argv element, timeout, output limit, schema validation, and fallback to local generation.
+- Note (2026-11-08, `command -v` on this machine): `claude`, `codex`, `copilot`, and `gemini` are available; `kiro-cli` is not (`kiro` is an IDE launcher, not the CLI).
 
-### Import ve export
+### Import and export
 
-- Paket formati `*.mockstudio.json`: `{ format: "mock-api-studio/bundle", version: 1, collections: [...] }`; her collection endpoint, senaryo, kural, endpoint modu, model baglantisi ve semayi tasir. Kimlikler import'ta yeniden uretilir.
-- Import akisi: parse -> dogrula (boyut siniri, sema, guvenli mod notlari) -> onizleme (eklenecek/cakisan endpoint'ler) -> cakisma secimi -> tek atomik yazma.
-- Donusturuculer `src/core/import/` altinda saf fonksiyonlardir (Mockoon bagimsiz): Postman v2.1, OpenAPI 3.x, HAR, cURL. Desteklenmeyen ogeler (script, auth helper, ornek olmayan request) raporlanir, sessizce atlanmaz.
+- Package format `*.mockstudio.json`: `{ format: "mock-api-studio/bundle", version: 1, collections: [...] }`; each collection carries endpoints, scenarios, rules, endpoint mode, model links, and schema. IDs are regenerated on import.
+- Import flow: parse -> validate (size limit, schema, safe-mode notes) -> preview (endpoints to be added/conflicts) -> select conflict handling -> single atomic write.
+- Converters are pure functions under `src/core/import/` (independent of Mockoon): Postman v2.1, OpenAPI 3.x, HAR, cURL. Unsupported items (scripts, auth helpers, requests that are not examples) are reported, not silently skipped.
 
-### Dagitim ve guncelleme
+### Distribution and updates
 
-- **Birincil yol tek binary (Node SEA).** M6 prototipi basariliysa her platform icin Node gomulu binary uretilir; parser child process'i ayni binary'yi alt komutla calistirir, tree-sitter WASM ve UI asset'leri SEA asset'i olarak gomulur. Guncelleme Homebrew/Scoop/winget ile yapilir. Asagidaki ozel runtime tasarimi yalniz SEA basarisiz olursa uygulanir.
-- Yerlesim (yedek yol): `~/.mock-studio/runtime/node-<surum>/` (ozel Node), `~/.mock-studio/app/<surum>/` (arac), `~/.mock-studio/bin/mock-studio` (baslatici). Sistem Node'u uygunsa (>= 22.12) kullanilabilir; varsayilan ozel runtime'dir (surum tutarliligi icin).
-- Kurulum betigi resmi `nodejs.org` dagitimini indirir ve `SHASUMS256.txt` ile dogrular; `sudo` ve sistem dizinlerine yazma yoktur; PATH degisikligi kullaniciya gosterilip onayla yapilir.
-- `mock-studio update`: GitHub Releases veya npm'den surum bilgisini yalniz kullanici komutuyla ceker; yeni surumu yan klasore kurar, baslaticiyi atomik olarak degistirir, bir onceki surumu `rollback` icin saklar.
-- Not: uretim bagimliliklarinda native `.node` modulu yok (2026-11-08 kontrolu); bu SEA'yi olasi kilar ama dogrulanmadi.
+- **Primary path: single binary (Node SEA).** If the M6 prototype succeeds, build a binary with embedded Node for each platform; the parser child process runs the same binary with a subcommand, and tree-sitter WASM and UI assets are embedded as SEA assets. Updates use Homebrew/Scoop/winget. The custom runtime design below is used only if SEA fails.
+- Layout (fallback path): `~/.mock-studio/runtime/node-<version>/` (dedicated Node), `~/.mock-studio/app/<version>/` (tool), `~/.mock-studio/bin/mock-studio` (launcher). System Node can be used if it is compatible (>= 22.12); the dedicated runtime is the default (for version consistency).
+- The installation script downloads the official `nodejs.org` distribution and verifies it with `SHASUMS256.txt`; it does not use `sudo` or write to system directories; PATH changes are shown to the user and made with approval.
+- `mock-studio update`: fetches version information from GitHub Releases or npm only on a user command; installs the new version in a sibling directory, switches the launcher atomically, and keeps the previous version for `rollback`.
+- Note: there is no native `.node` module in production dependencies (checked 2026-11-08); this makes SEA plausible but has not been verified.
