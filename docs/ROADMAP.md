@@ -106,7 +106,7 @@ When Milestones 1 and 2 are complete, the **offline MVP** is ready.
 
 Verified (`test/mcp.test.ts`, 7 tests; with a real stdio MCP client): six narrow tools (`list_collections`, `parse_model`, `get_schema`, `generate_sample`, `validate_body`, `save_scenario`); no shell or arbitrary file tool. The "generate with this model" flow writes a validated scenario to the file via `parse_model` -> `get_schema` -> `save_scenario`; invalid JSON or a body that does not match the model is rejected without saving anything; access outside the root (`..`, absolute path, symlink) is rejected. All flows that do not use MCP work without MCP under the same tests.
 
-Setup examples: [Development guide](DEVELOPMENT.md#mcp-setup-kiro-and-copilot).
+Setup examples: [Development guide](DEVELOPMENT.md#mcp-setup).
 
 **Open:** The flow was not tried with real Kiro or Copilot chat; it was verified at the protocol level with the SDK client.
 

@@ -89,6 +89,18 @@ mockbrew profiles list -p mocks
 mockbrew serve -p mocks --profile "Session expired"
 ```
 
+### Dynamic values, request validation and files
+
+Scenarios are static by default. Mark a scenario as dynamic (MCP `set_scenario_dynamic`; dashboard support is planned) to fill in allowlisted tokens per request:
+
+```json
+{ "id": "{{uuid}}", "name": "{{request.body.$.name}}", "createdAt": "{{now}}", "image": "{{vars.baseImageUrl}}/a.png" }
+```
+
+Supported tokens: `{{uuid}}`, `{{now}}`, `{{now:epoch}}`, `{{now:epochMillis}}`, `{{request.params.<name>}}`, `{{request.query.<name>}}`, `{{request.header.<name>}}`, `{{request.body.<path>}}`, `{{vars.<name>}}`, and `{{json <expr>}}` to insert a whole JSON value. Anything else, such as `{{faker ...}}` or `{{#each}}`, is returned as written and never executed. Project variables are stored in plain text in the project file, so do not put secrets in them.
+
+Link a request model to a POST/PUT/PATCH endpoint (MCP `set_request_model`) to answer bodies that do not match it with an "Invalid request (422)" scenario that lists the errors. A scenario can also serve a file from the project folder (MCP `set_scenario_file`); paths outside `--root` and symlinks are rejected.
+
 ### Check model drift
 
 ```sh
