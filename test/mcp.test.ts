@@ -42,7 +42,7 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'parse_model', 'preview_model_update', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
@@ -157,6 +157,19 @@ describe('MCP server', () => {
     expect(logs[0]).not.toHaveProperty('requestBody');
     expect(logs[0]).not.toHaveProperty('responseBody');
     expect((await call('stop_server')).json().running).toBe(false);
+  });
+
+  it('imports an OpenAPI document through preview_import and apply_import', async () => {
+    const content = await fs.readFile(new URL('./fixtures/import/openapi.json', import.meta.url), 'utf8');
+    const before = await studioText();
+    const preview = (await call('preview_import', { content, format: 'auto' })).json();
+    expect(preview.hash).toBeTruthy();
+    expect(Array.isArray(preview.warnings)).toBe(true);
+    expect(await studioText()).toBe(before);
+    expect((await call('preview_import', { content, format: 'yaml' })).isError).toBe(true);
+    expect((await call('apply_import', { previewHash: preview.hash, onConflict: 'skip' })).isError).toBe(false);
+    const endpoints = (await call('list_endpoints')).json().endpoints;
+    expect(endpoints.length).toBeGreaterThan(0);
   });
 
   it('turns "use this model" into a validated scenario saved to the project file', async () => {
