@@ -340,7 +340,8 @@ Deferred from M5 (user approval, 2026-11-08).
 **Status (2026-11-08): implemented; physical-device checks open.**
 - Connection screen: copyable base URLs and SVG QR codes per target (Android Emulator, iOS Simulator, `adb reverse`, LAN when enabled) using `qrcode-generator` 1.4.4 (MIT), with `X-Mock-Scenario` and debug network notes.
 - Local HTTPS (off by default): `mockbrew certs create|show|delete` and the dashboard create a local CA and server certificate (SANs for localhost, 127.0.0.1, ::1, 10.0.2.2 and LAN IPs) after confirmation, stored under `~/.mockbrew/certs/<project>` with 0600 keys, never in the project folder; only the public CA can be downloaded through the control API; CA install guidance for Android and iOS. Tests: QR generation, certificate SANs/permissions, HTTPS request trusted with the generated CA (`test/connectivity.test.ts`), E2E connect screen.
-- Open: certificate creation requires OpenSSL on PATH (a JS implementation would be needed for Windows without OpenSSL); recreate certificates when LAN addresses change; QR scanning, CA install and HTTPS on physical devices not tested.
+- Certificates are created in pure JS with `node-forge` 1.4.3 (async RSA-2048; tested with an empty PATH, no OpenSSL needed).
+- Open: Windows not run; recreate certificates when LAN addresses change; QR scanning, CA install and HTTPS on physical devices not tested.
 
 ### Milestone 17: Additional protocols (as needed)
 
