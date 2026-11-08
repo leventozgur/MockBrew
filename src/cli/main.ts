@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { isSea } from '../core/runtime-env.js';
+import { setFlagsFromString } from 'node:v8';
 import { StudioError } from '../core/errors.js';
 import { shutdownParser } from '../parser/index.js';
 import { UsageError, consoleIo, packageVersion } from './common.js';
@@ -87,7 +89,12 @@ async function run(argv: string[]): Promise<void> {
 }
 
 try {
-  await run(process.argv.slice(2));
+  if (isSea() && process.env.MOCK_STUDIO_SEA_WORKER === '1' && process.send) {
+    setFlagsFromString('--liftoff-only --no-wasm-tier-up --no-wasm-dynamic-tiering');
+    await import('../parser/worker.js');
+  } else {
+    await run(process.argv.slice(2));
+  }
   shutdownParser();
 } catch (error) {
   shutdownParser();

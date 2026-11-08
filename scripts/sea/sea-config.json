@@ -1,0 +1,12 @@
+{
+  "main": "scripts/sea/out/main.cjs",
+  "output": "scripts/sea/out/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "useSnapshot": false,
+  "useCodeCache": false,
+  "assets": {
+    "tree-sitter.wasm": "node_modules/web-tree-sitter/tree-sitter.wasm",
+    "tree-sitter-kotlin.wasm": "node_modules/tree-sitter-wasms/out/tree-sitter-kotlin.wasm",
+    "tree-sitter-swift.wasm": "node_modules/tree-sitter-wasms/out/tree-sitter-swift.wasm"
+  }
+}

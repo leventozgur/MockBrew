@@ -1,7 +1,8 @@
-import { type ChildProcess, fork } from 'node:child_process';
+import { type ChildProcess, fork, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isSea } from '../core/runtime-env.js';
 import type { ExtractOptions, ExtractResult, Issue, Language, SourceFile } from './ir.js';
 import type { WorkerRequest, WorkerResponse } from './worker.js';
 
@@ -44,7 +45,11 @@ export class ParserHost {
 
   private start(): Promise<void> {
     if (this.ready) return this.ready;
-    const child = fork(resolveWorkerPath(), [], {
+    const child = isSea() ? spawn(process.execPath, [], {
+      env: { ...process.env, MOCK_STUDIO_SEA_WORKER: '1' },
+      serialization: 'json',
+      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+    }) : fork(resolveWorkerPath(), [], {
       execArgv: ['--liftoff-only'],
       serialization: 'json',
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],

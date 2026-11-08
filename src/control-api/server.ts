@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AiRequest, AiService } from '../ai/service.js';
+import { isSea, seaAssetDir } from '../core/runtime-env.js';
 import { StudioError, invalid } from '../core/errors.js';
 import { HTTP_METHODS, type ModelLink } from '../core/model.js';
 import type { ProjectService } from '../core/service.js';
@@ -43,6 +44,7 @@ function digest(value: string): Buffer {
 }
 
 function defaultUiDir(): string {
+  if (isSea()) return path.join(seaAssetDir(), 'ui');
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, '..', 'ui');
 }

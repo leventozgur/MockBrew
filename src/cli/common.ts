@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { isSea, seaVersion } from '../core/runtime-env.js';
 import { StudioError } from '../core/errors.js';
 import { ProjectService, type ServiceOptions } from '../core/service.js';
 import type { Issue } from '../parser/ir.js';
@@ -51,6 +52,7 @@ export function waitForSignal(): Promise<void> {
 }
 
 export function packageVersion(): string {
+  if (isSea()) return seaVersion();
   const file = new URL('../../package.json', import.meta.url);
   return (JSON.parse(readFileSync(file, 'utf8')) as { version: string }).version;
 }
