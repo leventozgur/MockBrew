@@ -208,6 +208,11 @@ Expose Mockoon's response rules, which already work in the file, through the dom
 
 **Exit criteria:** Profile changes apply without restart; deleting a profile restores the previous scenarios; global delay and timeout are verified with integration tests.
 
+**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+- Profiles live in the sidecar (schemaVersion 2 kept: optional fields, passthrough readers). Activation switches the listed endpoints to the chosen scenario in the derived environment without restart and without touching the environment file; deactivation restores the file's selection. `X-Mock-Scenario` still wins. Optional global latency and timeout simulation (all or listed endpoints). Stale references are reported and ignored. Logs carry the profile name and reason `profile`.
+- `mockbrew serve --profile <name>`, `mockbrew profiles list [--json]`, MCP `list_profiles`, `save_profile`, `delete_profile` (preview unless confirm), `activate_profile`, `deactivate_profile`; control API routes. `test/profiles.test.ts` plus CLI/MCP/API coverage.
+- Open: dashboard profile editor and switcher; the UI has no label yet for the `profile` log reason.
+
 ### Milestone 9: Update mocks when the model changes
 
 Current `check` only shows the diff; updating bodies is left to the user. Design: [Updating bodies when the model changes](ARCHITECTURE.md#updating-bodies-when-the-model-changes).
@@ -219,10 +224,11 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 
 **Exit criteria:** For fixtures with added/deleted/type-changed/enum-changed/nullable-changed fields, the updated body is valid against the new schema and manually entered values are preserved; 4xx/5xx scenarios are untouched.
 
-**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+**Status (2026-11-08): done (backend, CLI, MCP, control API and dashboard).**
 - `src/core/model-update.ts`: merge keeps valid manual values and raw number lexemes (64-bit safe), adds required fields with the local generator (optional fields on request), removes unknown fields, regenerates type/enum/nullability changes, keeps the body's indentation style.
 - Preview and hash-approved apply in the service, `mockbrew check --fix [--yes]`, MCP `preview_model_update` / `apply_model_update`, control API routes. Only model-bound 2xx scenarios change; non-JSON bodies are reported as skipped. `test/model-update.test.ts` plus CLI/MCP/API coverage (128 tests passing).
-- Open: dashboard notification and one-click update; source file watching for model changes.
+- Dashboard: drift badges after an explicit check, per-scenario line diff and change counts, skipped reasons, optional-field filling, hash-approved apply with re-preview on STALE (E2E covers a Kotlin model change end to end). Applying any selected scenario updates the endpoint's stored schema; unselected scenarios keep their bodies (the preview warns).
+- Open: background watching of model source files.
 
 ### Milestone 10: Fully automated use through MCP
 
@@ -240,6 +246,11 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 - Provider selection in UI and CLI (`--ai auto|claude|codex|copilot|gemini|kiro`); preview + hash-based approval rule applies identically to all providers.
 
 **Exit criteria:** Manually generate with each installed provider using one synthetic model; automatically verify fallback to local generation when a CLI is missing, authentication fails, or times out.
+
+**Status (2026-11-08): implemented; real-provider generation not yet verified.**
+- Registry in `src/ai/registry.ts`; `mockbrew ui --ai auto|copilot|claude|codex|gemini` (comma lists). Detection runs only `--version`/`--help`. Copilot keeps full isolation (hidden `--config-dir` still accepted by 1.0.85). Claude Code (`--print`, `--tools ""`, `--safe-mode`, `--strict-mcp-config`), Codex (`exec --sandbox read-only --ignore-user-config --ephemeral`, output file) and Gemini (`-p`, `--approval-mode plan`, JSON output) are offered as **limited** with a note in the Generate dialog and preview. Only provider-specific auth variables are forwarded. Kiro CLI is listed as not supported yet (not installed here; no offline docs).
+- Approval binds provider and prompt hash. Tests use fake executables (`test/ai.test.ts`, `test/ai-registry.test.ts`).
+- Open: one manual generation per installed provider with a synthetic model; Kiro CLI support.
 
 ### Milestone 12: Import / export and recording mode
 
