@@ -3,6 +3,7 @@ import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { type AiProvider, extractJson, sanitizedEnv, OUTPUT_FILE_PLACEHOLDER, WORK_DIR_PLACEHOLDER } from './cli-runner.js';
+import { resolveLaunch } from '../core/launch.js';
 import { copilotCliProvider } from './copilot.js';
 
 const execFileAsync = promisify(execFile);
@@ -60,9 +61,9 @@ export async function detectUnsupportedProviders(selection: string[]): Promise<{
 }
 
 /** Search PATH without a shell. Empty PATH entries are ignored. */
-export async function findExecutable(command: string, env = process.env): Promise<string | undefined> {
-  const extensions = process.platform === 'win32' ? (env.PATHEXT || '.EXE;.CMD;.BAT').split(';') : [''];
-  for (const dir of (env.PATH || '').split(path.delimiter).filter(Boolean)) {
+export async function findExecutable(command: string, env = process.env, platform: NodeJS.Platform = process.platform): Promise<string | undefined> {
+  const extensions = platform === 'win32' ? (path.extname(command) ? [''] : (env.PATHEXT || '.EXE;.CMD;.BAT').split(';').filter((ext) => /^\.[a-z0-9]+$/i.test(ext) && ext.toLowerCase() !== '.ps1')) : [''];
+  for (const dir of (env.PATH || '').split(platform === 'win32' ? ';' : path.delimiter).filter(Boolean)) {
     for (const ext of extensions) {
       const candidate = path.resolve(dir, command + ext);
       try { await fs.access(candidate, constants.X_OK); if ((await fs.stat(candidate)).isFile()) return candidate; } catch { /* continue */ }
@@ -76,10 +77,11 @@ export async function detectProviders(selection: string[]): Promise<{ info: Prov
     const command = await findExecutable(entry.id === 'copilot' ? process.env.MOCKBREW_COPILOT_BIN || entry.command : entry.command);
     if (!command || !('create' in entry) || !entry.create) return undefined;
     try {
-      const { stdout } = await execFileAsync(command, ['--version'], { timeout: 3000, maxBuffer: 16_384, windowsHide: true, env: sanitizedEnv() });
+      const launch = resolveLaunch(command);
+      const { stdout } = await execFileAsync(launch.command, [...launch.args, '--version'], { timeout: 3000, maxBuffer: 16_384, windowsHide: true, env: sanitizedEnv() });
       let help = '';
       if (entry.id === 'codex' || entry.id === 'gemini' || entry.id === 'copilot') {
-        try { help = (await execFileAsync(command, entry.id === 'codex' ? ['exec', '--help'] : ['--help'], { timeout: 3000, maxBuffer: 128_000, windowsHide: true, env: sanitizedEnv() })).stdout; } catch { /* Optional flags remain disabled. */ }
+        try { help = (await execFileAsync(launch.command, [...launch.args, ...(entry.id === 'codex' ? ['exec', '--help'] : ['--help'])], { timeout: 3000, maxBuffer: 128_000, windowsHide: true, env: sanitizedEnv() })).stdout; } catch { /* Optional flags remain disabled. */ }
       }
       let provider = entry.id === 'codex' ? codexProvider(command, /--color\b/.test(help)) : entry.id === 'gemini' ? geminiProvider(command, /--extensions[^\n]*(?:none|no extensions)/i.test(help)) : entry.create(command);
       if (entry.id === 'copilot') {

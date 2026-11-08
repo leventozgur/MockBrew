@@ -278,8 +278,8 @@ describe('access root helpers', () => {
     expect(isBroadRoot(os.homedir())).toBe(true);
     expect(isBroadRoot(path.dirname(os.homedir()))).toBe(true);
     expect(isBroadRoot(path.join(os.homedir(), 'Projects', 'app'))).toBe(false);
-    expect(commonAncestor('/a/b/mocks', '/a/b/app/src')).toBe('/a/b');
-    expect(commonAncestor('/a/mocks', '/b/app')).toBe('/');
+    expect(commonAncestor('/a/b/mocks', '/a/b/app/src')).toBe(path.resolve('/a/b'));
+    expect(commonAncestor('/a/mocks', '/b/app')).toBe(path.parse(path.resolve('/')).root);
   });
 });
 

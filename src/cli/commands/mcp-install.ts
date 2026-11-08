@@ -6,6 +6,8 @@ import { parseArgs } from 'node:util';
 import { locateProject } from '../../store/files.js';
 import { StudioError } from '../../core/errors.js';
 import { isSea } from '../../core/runtime-env.js';
+import { findExecutable } from '../../ai/registry.js';
+import { resolveLaunch } from '../../core/launch.js';
 import { UsageError } from '../common.js';
 
 export async function installMcp(argv: string[]): Promise<void> {
@@ -47,8 +49,11 @@ export async function installMcp(argv: string[]): Promise<void> {
     rl.close();
     if (!/^y(es)?$/i.test(answer.trim())) throw new UsageError('Installation cancelled.');
   }
+  const executable = await findExecutable(client);
+  if (!executable) throw new Error(`${client} CLI not found on PATH. Configuration snippet:\n${snippet}`);
+  const launch = resolveLaunch(executable);
   await new Promise<void>((resolve, reject) => {
-    const child = execFile(client, args, (error) => {
+    const child = execFile(launch.command, [...launch.args, ...args], (error) => {
       if (error && (error as NodeJS.ErrnoException).code === 'ENOENT') reject(new Error(`${client} CLI not found on PATH. Configuration snippet:\n${snippet}`));
       else if (error) reject(error);
       else resolve();

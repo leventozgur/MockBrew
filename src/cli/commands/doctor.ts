@@ -4,6 +4,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { resolveLaunch } from '../../core/launch.js';
 import { detectProviders, findExecutable } from '../../ai/registry.js';
 import { cacheDir, isSea, seaAssetDir } from '../../core/runtime-env.js';
 import { ParserHost } from '../../parser/host.js';
@@ -61,7 +62,7 @@ export async function doctorCommand(argv: string[], io: Io): Promise<void> {
   });
   const providers = await detectProviders(['auto']);
   io.out(`AI CLIs: ${providers.map(({ info }) => `${info.name} ${info.version}`).join(', ') || 'none detected'}`);
-  const mcp = (await Promise.all(['kiro-cli', 'copilot', 'claude', 'codex', 'gemini'].map(async (name) => await findExecutable(name) ? name : undefined))).filter(Boolean);
+  const mcp = (await Promise.all(['kiro-cli', 'copilot', 'claude', 'codex', 'gemini'].map(async (name) => await findExecutable(name).then((found) => { if (!found) return undefined; try { resolveLaunch(found); return name; } catch { return undefined; } })))).filter(Boolean);
   io.out(`MCP client CLIs: ${mcp.join(', ') || 'none detected'}`);
   if (failed) process.exitCode = 1;
 }

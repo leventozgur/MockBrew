@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { fakeExecutable } from './fake-executable.js';
 import { ProjectService } from '../src/core/service.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -16,7 +17,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  child?.kill('SIGKILL');
+  if (child && child.exitCode === null && child.signalCode === null) {
+    const exited = new Promise<void>((resolve) => child!.once('exit', () => resolve()));
+    child.kill('SIGKILL');
+    await exited;
+  }
   child = undefined;
   await fs.rm(dir, { recursive: true, force: true });
 });
@@ -151,7 +156,10 @@ describe('cli', () => {
 
     const exited = new Promise<number | null>((resolve) => child?.once('exit', (code) => resolve(code)));
     child?.kill('SIGINT');
-    expect(await exited).toBe(0);
+    const code = await exited;
+    // Windows terminates the process instead of delivering SIGINT to Node.
+    if (process.platform !== 'win32') expect(code).toBe(0);
+    else expect(code).toBeNull();
   });
 
   it('records model sources relative to the project and re-reads them with --root', async () => {
@@ -222,7 +230,7 @@ describe('mcp install', () => {
     const log = path.join(dir, 'args.json');
     const malicious = path.join(dir, 'project;touch PWNED');
     for (const name of ['claude', 'codex', 'gemini', 'copilot']) {
-      await fs.writeFile(path.join(bin, name), `#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.ARGS_LOG, JSON.stringify(process.argv.slice(2)));\n`, { mode: 0o755 });
+      await fakeExecutable(path.join(bin, name), `require('node:fs').writeFileSync(process.env.ARGS_LOG, JSON.stringify(process.argv.slice(2)));`);
       const result = spawnSync(process.execPath, [cli, 'mcp', 'install', name, '-p', malicious, '--root', dir, '--yes'], { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: bin, ARGS_LOG: log } });
       expect(result.status, result.stderr).toBe(0);
       const prefix = name === 'gemini' ? ['mcp', 'add', 'mockbrew'] : ['mcp', 'add', 'mockbrew', '--'];

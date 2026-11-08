@@ -81,16 +81,19 @@ export function isBroadRoot(dir: string): boolean {
   const resolved = path.resolve(dir);
   if (resolved === path.parse(resolved).root) return true;
   const home = path.resolve(os.homedir());
-  return home === resolved || home.startsWith(resolved + path.sep);
+  return path.relative(resolved, home) === '' || isInside(resolved, home);
 }
 
 /** Closest folder that contains both paths. */
 export function commonAncestor(a: string, b: string): string {
-  const left = path.resolve(a).split(path.sep);
-  const right = path.resolve(b).split(path.sep);
-  let i = 0;
-  while (i < left.length && i < right.length && left[i] === right[i]) i++;
-  return left.slice(0, i).join(path.sep) || path.sep;
+  let ancestor = path.resolve(a);
+  const target = path.resolve(b);
+  while (ancestor !== target && !isInside(ancestor, target)) {
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) return ancestor;
+    ancestor = parent;
+  }
+  return ancestor;
 }
 
 export const MAX_RESPONSE_FILE_BYTES = 50 * 1024 * 1024;

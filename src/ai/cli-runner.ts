@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { constants, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { resolveLaunch } from '../core/launch.js';
 
 /** In `args`, this placeholder is replaced with an empty, private configuration folder. */
 export const CONFIG_DIR_PLACEHOLDER = '@CONFIG_DIR@';
@@ -68,11 +69,14 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
   const outputFile = path.join(root, 'answer');
   const args = invocation.args.map((a) => a === CONFIG_DIR_PLACEHOLDER ? configDir : a === WORK_DIR_PLACEHOLDER ? cwd : a === OUTPUT_FILE_PLACEHOLDER ? outputFile : a);
   try {
+    let launch: ReturnType<typeof resolveLaunch>;
+    try { launch = resolveLaunch(invocation.command); } catch (error) { return { ok: false, kind: 'failed', message: (error as Error).message }; }
     const result = await new Promise<RunResult>((resolve) => {
       let settled = false;
       let stdout = '';
       let stderr = '';
       let bytes = 0;
+      let stopping: RunResult | undefined;
       const finish = (result: RunResult) => {
         if (settled) return;
         settled = true;
@@ -81,7 +85,7 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
         resolve(result);
       };
 
-      const child = spawn(invocation.command, args, {
+      const child = spawn(launch.command, [...launch.args, ...args], {
         cwd,
         env: sanitizedEnv(process.env, [...(options.extraEnv ?? []), ...(invocation.extraEnv ?? [])]),
         shell: false,
@@ -90,7 +94,8 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
       });
 
       const stop = (kind: RunFailure, message: string) => {
-        finish({ ok: false, kind, message });
+        if (stopping || settled) return;
+        stopping = { ok: false, kind, message };
         child.kill('SIGTERM');
         setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS).unref();
       };
@@ -110,10 +115,12 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
         stderr = (stderr + chunk.toString('utf8')).slice(-4000);
       });
       child.on('error', (error: NodeJS.ErrnoException) => {
+        if (stopping) return finish(stopping);
         if (error.code === 'ENOENT') finish({ ok: false, kind: 'not-found', message: `"${invocation.command}" was not found. Install the CLI and make sure it is on your PATH.` });
         else finish({ ok: false, kind: 'failed', message: error.message });
       });
       child.on('close', (code, signal) => {
+        if (stopping) return finish(stopping);
         if (code === 0) return finish({ ok: true, stdout });
         const detail = stderr.trim().split('\n').filter(Boolean).slice(-2).join(' ').slice(0, 300);
         finish({ ok: false, kind: 'exit', message: `The AI CLI exited with ${signal ?? `code ${code}`}${detail ? `: ${detail}` : ''}. If it asks you to sign in, authenticate it in a terminal first.` });

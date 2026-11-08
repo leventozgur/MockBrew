@@ -202,9 +202,12 @@ describe('control API workflows', () => {
     expect([403, 404]).toContain(res.status);
     res = await call('/api/models/parse', { method: 'POST', body: { paths: ['/etc/hosts'] } });
     expect([403, 404]).toContain(res.status);
-    await fs.symlink('/etc', path.join(dir, 'link'));
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-outside-'));
+    await fs.writeFile(path.join(outside, 'hosts'), 'synthetic');
+    await fs.symlink(outside, path.join(dir, 'link'), 'junction');
     res = await call('/api/models/parse', { method: 'POST', body: { paths: ['link/hosts'] } });
     expect(res.status).toBe(403);
+    await fs.rm(outside, { recursive: true, force: true });
   });
 
   it('starts and stops the mock server and exposes logs', async () => {

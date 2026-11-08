@@ -25,8 +25,9 @@ it('encodes a known URL matrix', () => {
 
 it('creates project certificates outside the project and serves HTTPS with the CA trusted', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'mockbrew-certs-test-'));
-  const previousHome = process.env.HOME;
-  process.env.HOME = root;
+  const homeVariable = process.platform === 'win32' ? 'USERPROFILE' : 'HOME';
+  const previousHome = process.env[homeVariable];
+  process.env[homeVariable] = root;
   const project = path.join(root, 'project');
   const listener = net.createServer();
   await new Promise<void>((resolve) => listener.listen(0, '127.0.0.1', resolve));
@@ -76,7 +77,7 @@ it('creates project certificates outside the project and serves HTTPS with the C
     expect(status).toBe(404);
   } finally {
     await api.close(); await service.close();
-    if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+    if (previousHome === undefined) delete process.env[homeVariable]; else process.env[homeVariable] = previousHome;
     await rm(root, { recursive: true, force: true });
   }
 }, 30000);

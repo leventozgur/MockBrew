@@ -1,7 +1,9 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fakeExecutable } from './fake-executable.js';
 import { copilotCliProvider } from '../src/ai/copilot.js';
 import { type AiProvider, extractJson, sanitizedEnv } from '../src/ai/cli-runner.js';
 import { AiService } from '../src/ai/service.js';
@@ -40,7 +42,8 @@ switch (${JSON.stringify(behavior)}) {
 `,
     { mode: 0o755 },
   );
-  return { id: 'fake', name: 'Fake CLI', invocation: (prompt) => ({ command: script, args: ['--flag', '-p', prompt] }) };
+  const command = process.platform === 'win32' ? await fakeExecutable(path.join(dir, `shim-${behavior}`), `import(${JSON.stringify(pathToFileURL(script).href)});`) : script;
+  return { id: 'fake', name: 'Fake CLI', invocation: (prompt) => ({ command, args: ['--flag', '-p', prompt] }) };
 }
 
 const calls = async (): Promise<{ args: string[]; cwd: string; entries: string[]; envKeys: string[]; pid: number }[]> => {

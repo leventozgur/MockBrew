@@ -54,6 +54,7 @@ export async function createCertificates(project: string, home = os.homedir()): 
       { name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }, ...ips.map((ip) => ({ type: 7, ip }))] },
     ]);
     server.sign(caPrivate, forge.md.sha256.create());
+    // Windows has no POSIX file modes; private keys rely on the user profile ACL.
     const writeKey = (file: string, key: string) => {
       const temporary = `${file}.tmp`;
       writeFileSync(temporary, key, { mode: 0o600, flag: 'wx' });

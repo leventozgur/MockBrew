@@ -8,8 +8,8 @@ import { cacheDir, extractSeaAssets } from '../src/core/runtime-env.js';
 describe('SEA cache', () => {
   it('selects platform cache directories', () => {
     expect(cacheDir('darwin', {}, '/home/user')).toBe(path.join('/home/user', 'Library/Caches/mockbrew'));
-    expect(cacheDir('linux', { XDG_CACHE_HOME: '/cache' }, '/home/user')).toBe('/cache/mockbrew');
-    expect(cacheDir('linux', { XDG_CACHE_HOME: 'relative' }, '/home/user')).toBe('/home/user/.cache/mockbrew');
+    expect(cacheDir('linux', { XDG_CACHE_HOME: '/cache' }, '/home/user')).toBe(path.join('/cache', 'mockbrew'));
+    expect(cacheDir('linux', { XDG_CACHE_HOME: 'relative' }, '/home/user')).toBe(path.join('/home/user', '.cache', 'mockbrew'));
     expect(cacheDir('win32', { LOCALAPPDATA: '/local' }, '/home/user')).toBe(path.join('/local', 'mockbrew', 'Cache'));
   });
   it('verifies and publishes assets once, and rejects invalid bytes and paths', () => {
