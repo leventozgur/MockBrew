@@ -5,7 +5,8 @@ import type { ProjectService } from '../../core/service.js';
 import { guarded, text } from '../server.js';
 
 const id = z.string().min(1).max(200);
-const mutation = { readOnlyHint: false, openWorldHint: false };
+// MCP treats a write tool as destructive unless destructiveHint is false.
+const mutation = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 
 export function registerProfileTools(server: McpServer, service: ProjectService): void {
   server.registerTool('list_profiles', { description: 'List profiles, their active state and stale references.', annotations: { readOnlyHint: true, openWorldHint: false } }, guarded(async () => text(service.listProfiles())));

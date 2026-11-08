@@ -45,6 +45,12 @@ describe('MCP server', () => {
     expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_request_model', 'set_scenario_dynamic', 'set_scenario_file', 'set_scenario_rules', 'set_variables', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body', 'validate_tokens']);
     expect(client.getInstructions()).toContain('parse_model');
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
+    // MCP clients (e.g. Codex with approval "never") treat write tools without destructiveHint as destructive.
+    const implicit = tools.filter((t) => t.annotations?.readOnlyHint !== true && typeof t.annotations?.destructiveHint !== 'boolean').map((t) => t.name);
+    expect(implicit.filter((name) => !['apply_import', 'save_recordings', 'start_recording', 'stop_recording'].includes(name))).toEqual([]);
+    const destructive = tools.filter((t) => t.annotations?.destructiveHint === true).map((t) => t.name).sort();
+    expect(destructive).toEqual(expect.arrayContaining(['apply_model_update', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario']));
+    expect(destructive).not.toContain('save_profile');
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
     expect((await call('apply_model_update', { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'invalid' })).isError).toBe(true);
     const save = tools.find((t) => t.name === 'save_scenario');

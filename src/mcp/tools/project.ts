@@ -17,7 +17,8 @@ const scenario = {
   latencyMs: z.number().int().min(0).max(60000).optional(),
 };
 const readOnly = { readOnlyHint: true, openWorldHint: false };
-const mutation = { readOnlyHint: false, openWorldHint: false };
+// MCP treats a write tool as destructive unless destructiveHint is false; deletions opt back in below.
+const mutation = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const deletion = { ...mutation, destructiveHint: true };
 
 export function registerProjectTools(server: McpServer, service: ProjectService): void {
