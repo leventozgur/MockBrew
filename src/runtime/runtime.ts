@@ -43,6 +43,17 @@ function stringifyBody(body: unknown): string | undefined {
   return truncate(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
+
+/** The engine does not publish its listener address; isolate the compatibility check here. */
+export function engineListenerPort(server: unknown): number {
+  const listener = (server as { serverInstance?: HttpServer } | null)?.serverInstance;
+  const address = typeof listener?.address === 'function' ? listener.address() : null;
+  if (!address || typeof address === 'string' || !Number.isInteger(address.port) || address.port <= 0) {
+    throw new Error('Cannot determine the engine listener port; engine internals may have changed. Check serverInstance.address().');
+  }
+  return address.port;
+}
+
 /** Runs the Mockoon engine for a project and keeps a bounded, masked request log. */
 export class MockRuntime extends EventEmitter {
   private server: MockoonServer | undefined;
@@ -64,6 +75,8 @@ export class MockRuntime extends EventEmitter {
   /** Secret of this run: only engine responses carrying it are trusted by the front layer. */
   private readonly responseKey = randomUUID();
   private dynamic: DynamicLayer;
+  private readonly warningTimes = new Map<string, number>();
+  private readonly notes: string[] = [];
 
   constructor(private readonly options: RuntimeOptions) {
     super();
@@ -73,8 +86,18 @@ export class MockRuntime extends EventEmitter {
       projectDir: options.environmentDirectory,
       root: () => options.root?.() ?? options.environmentDirectory,
       recordDirect: (entry) => this.recordDirect(entry),
-      warn: (message) => this.emit('warning', { message }),
+      warn: (message) => this.warn(message),
     });
+  }
+
+  private warn(message: string): void {
+    const now = Date.now();
+    if (now - (this.warningTimes.get(message) ?? 0) < 60_000) return;
+    this.warningTimes.set(message, now);
+    if (this.warningTimes.size > 100) this.warningTimes.delete(this.warningTimes.keys().next().value as string);
+    if (!this.notes.includes(message)) this.notes.push(message);
+    if (this.notes.length > 20) this.notes.shift();
+    this.emit('warning', { message });
   }
 
   status(): RuntimeStatus {
@@ -86,6 +109,7 @@ export class MockRuntime extends EventEmitter {
       ...(this.error ? { error: this.error } : {}),
       ...(this.startedAt ? { startedAt: this.startedAt } : {}),
       routeCount: this.current?.routeCount ?? 0,
+      ...(this.notes.length ? { notes: [...this.notes] } : {}),
     };
   }
 
@@ -174,11 +198,7 @@ export class MockRuntime extends EventEmitter {
       });
       started = true;
       this.server = server;
-      // The engine does not expose its listener address; read the OS-assigned port from its server.
-      const listener = (server as unknown as { serverInstance: HttpServer }).serverInstance;
-      const address = listener.address();
-      if (!address || typeof address === 'string') throw new Error('Engine listener has no TCP address.');
-      this.enginePort = address.port;
+      this.enginePort = engineListenerPort(server);
       // Listener settings no longer control the bound socket; retain the public values for engine behavior.
       server.updateEnvironment(environment);
       front.setEnginePort(this.enginePort);
@@ -304,6 +324,7 @@ export class MockRuntime extends EventEmitter {
     };
     const requestId = transaction.request.headers.find((h) => h.key.toLowerCase() === REQUEST_ID_HEADER)?.value;
     const extras = this.dynamic.take(requestId);
+    if (extras?.method) entry.method = extras.method;
     if (extras?.requestValidation) entry.requestValidation = extras.requestValidation;
     if (extras?.multipart) entry.multipart = extras.multipart;
     const dynamicMeta = current?.scenarioMeta.get(transaction.routeResponseUUID);
@@ -323,6 +344,17 @@ export class MockRuntime extends EventEmitter {
     if (this.logBodies) {
       entry.requestBody = stringifyBody(transaction.request.body);
       entry.responseBody = stringifyBody(transaction.response.body);
+    }
+    if (dynamicMeta?.dynamic || dynamicMeta?.bodyFile) {
+      const logBodies = this.logBodies;
+      if (logBodies && !extras?.bypassed) entry.responseBody = undefined;
+      const finish = () => {
+        if (logBodies) entry.responseBody = stringifyBody(extras?.bypassed ? (dynamicMeta.bodyFile ? undefined : transaction.response.body) : extras?.responseBody);
+        this.pushEntry(entry);
+      };
+      if (extras && !extras.responseDone) { extras.finishLog = finish; return; }
+      finish();
+      return;
     }
     this.pushEntry(entry);
   }

@@ -31,6 +31,11 @@ const DEFAULT_INVALID: DirectScenario = {
 export interface RequestExtras {
   multipart?: MultipartLog;
   requestValidation?: RequestLog['requestValidation'];
+  method?: string;
+  bypassed?: boolean;
+  responseDone?: boolean;
+  responseBody?: string;
+  finishLog?: () => void;
 }
 
 export interface DirectLog {
@@ -52,6 +57,10 @@ export interface DynamicDeps {
   root(): string;
   recordDirect(entry: DirectLog): void;
   warn(message: string): void;
+}
+
+function bodyMode(contentType: string): boolean | 'markup' {
+  return /json/i.test(contentType) ? true : /(?:text\/html|(?:application|text)\/xml|[\w.+-]+\/[^;]+\+xml)(?:\s*;|\s*$)/i.test(contentType) ? 'markup' : false;
 }
 
 function nullObject(): Record<string, unknown> {
@@ -114,7 +123,7 @@ export class DynamicLayer {
   readonly hooks: FrontHooks = {
     onRequest: (ctx) => this.onRequest(ctx),
     bufferLimit: (_ctx, headers) => this.bufferLimit(headers),
-    onBypass: (_ctx, headers, reason) => this.onBypass(headers, reason),
+    onBypass: (ctx, headers) => this.onBypass(ctx, headers),
     onResponse: (ctx, response) => this.onResponse(ctx, response),
   };
 
@@ -126,11 +135,14 @@ export class DynamicLayer {
     return meta.bodyFile ? MAX_FILE_RESPONSE_BUFFER : meta.dynamic ? MAX_DYNAMIC_BYTES : 0;
   }
 
-  private onBypass(headers: IncomingHttpHeaders, reason: 'too-large' | 'unknown-length'): void {
+  private onBypass(ctx: FrontContext, headers: IncomingHttpHeaders): void {
     const env = this.deps.current();
     const found = env && parsePrivate(env, headers[RESPONSE_HEADER]);
     const meta = found && env.scenarioMeta.get(found.responseId);
-    if (meta?.dynamic) this.deps.warn(`Scenario "${meta.name}" was served without filling in tokens: ${reason === 'too-large' ? 'the response is larger than 5 MB' : 'the response length is unknown'}.`);
+    if (meta?.dynamic || meta?.bodyFile) this.deps.warn(`Scenario "${meta.name}" was served without processing: the engine response is larger than ${meta.bodyFile ? '1 MB' : '5 MB'}.`);
+    const extras = ctx.state.extras as RequestExtras | undefined;
+    if (extras) extras.bypassed = true;
+    this.complete(ctx);
   }
 
   // ---------------------------------------------------------------- requests
@@ -143,12 +155,21 @@ export class DynamicLayer {
     let url: URL;
     try { url = new URL(req.url ?? '/', 'http://localhost'); } catch { return undefined; }
     const extras: RequestExtras = {};
+    ctx.state.extras = extras;
     const boundary = multipartBoundary(req.headers['content-type']);
     if (boundary) {
       const inspector = new MultipartInspector(boundary);
       ctx.tap = { chunk: (data) => inspector.write(data), end: () => { extras.multipart = inspector.end(); } };
     }
-    const match = findRoute(env.routes, method, url.pathname);
+    let match = findRoute(env.routes, method, url.pathname);
+    if (method === 'HEAD' && !match) {
+      const get = findRoute(env.routes, 'GET', url.pathname);
+      if (get && [...env.scenarioMeta.values()].some((item) => item.routeId === get.entry.uuid && (item.dynamic || item.bodyFile))) {
+        match = get;
+        ctx.upstreamMethod = 'GET';
+        extras.method = 'HEAD';
+      }
+    }
     const meta = match && env.routeMeta.get(match.entry.uuid);
     if (match && meta) {
       const validating = meta.requestModel !== undefined && WRITE_METHODS.has(method);
@@ -170,7 +191,7 @@ export class DynamicLayer {
       }
     }
     // Proxied traffic goes to the real backend: send it no private header.
-    if ((extras.requestValidation || ctx.tap) && (match || !env.environment.proxyMode)) {
+    if ((extras.requestValidation || ctx.tap || (match && [...env.scenarioMeta.values()].some((item) => item.routeId === match.entry.uuid && (item.dynamic || item.bodyFile)))) && (match || !env.environment.proxyMode)) {
       const id = this.nextId++;
       this.pending.set(id, extras);
       if (this.pending.size > MAX_PENDING) this.pending.delete(this.pending.keys().next().value as number);
@@ -208,7 +229,7 @@ export class DynamicLayer {
       headers[header.key.toLowerCase()] = safeHeaderValue(scenario.dynamic ? expandTokens(header.value, tokens, false) : header.value);
     }
     const contentType = String(headers['content-type'] ?? '');
-    const body = scenario.dynamic ? expandTokens(scenario.body, tokens, /json/i.test(contentType)) : scenario.body;
+    const body = scenario.dynamic ? expandTokens(scenario.body, tokens, bodyMode(contentType)) : scenario.body;
     headers['content-length'] = String(Buffer.byteLength(body));
     if (scenario.latencyMs > 0) await new Promise((resolve) => setTimeout(resolve, scenario.latencyMs));
     this.deps.recordDirect({
@@ -217,6 +238,14 @@ export class DynamicLayer {
       requestBody, responseBody: body, routeId, scenario: scenario.name, extras,
     });
     return { status: scenario.status, headers, body };
+  }
+
+  private complete(ctx: FrontContext, body?: string): void {
+    const extras = ctx.state.extras as RequestExtras | undefined;
+    if (!extras) return;
+    extras.responseBody = body;
+    extras.responseDone = true;
+    extras.finishLog?.();
   }
 
   // --------------------------------------------------------------- responses
@@ -228,10 +257,15 @@ export class DynamicLayer {
     if (!env || !found || !meta || meta.routeId !== found.routeId) return undefined;
     const kept: OutgoingHttpHeaders = {};
     for (const [name, value] of Object.entries(response.headers)) if (!HOP_HEADERS.has(name)) kept[name] = value;
-    if (meta.bodyFile) return this.serveFile(meta.bodyFile, meta.name, response.status, kept);
+    if (meta.bodyFile) {
+      const result = await this.serveFile(meta.bodyFile, meta.name, response.status, kept);
+      this.complete(ctx, result.stream ? `[file ${meta.bodyFile}, ${result.headers?.['content-length']} bytes]` : String(result.body ?? ''));
+      return result;
+    }
     if (!meta.dynamic) return undefined;
     if (response.headers['content-encoding'] && response.headers['content-encoding'] !== 'identity') {
       this.deps.warn(`Scenario "${meta.name}" was served without filling in tokens: the response is compressed.`);
+      this.complete(ctx, response.body.toString('utf8'));
       return undefined;
     }
     let url: URL;
@@ -245,8 +279,14 @@ export class DynamicLayer {
     }
     const contentType = String(response.headers['content-type'] ?? '');
     let body = response.body;
-    if (TEXT_TYPE.test(contentType) || contentType === '') body = Buffer.from(expandTokens(response.body.toString('utf8'), tokens, /json/i.test(contentType)), 'utf8');
+    if (ctx.request.method === 'HEAD' && !ctx.upstreamMethod) {
+      const selected = env.environment.routes.find((route) => route.uuid === found.routeId)?.responses.find((item) => item.uuid === found.responseId);
+      body = Buffer.from(selected?.body ?? '', 'utf8');
+      if (body.length > MAX_DYNAMIC_BYTES) { this.onBypass(ctx, response.headers); return undefined; }
+    }
+    if (TEXT_TYPE.test(contentType) || contentType === '') body = Buffer.from(expandTokens(body.toString('utf8'), tokens, bodyMode(contentType)), 'utf8');
     kept['content-length'] = String(body.length);
+    this.complete(ctx, body.toString('utf8'));
     return { status: response.status, headers: kept, body };
   }
 

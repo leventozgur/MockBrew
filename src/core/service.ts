@@ -120,6 +120,7 @@ export class ProjectService extends EventEmitter {
     this.models = new ModelService(this.root);
     this.runtime = new MockRuntime({ environmentDirectory: location.dir, root: () => this.root });
     this.runtime.on('status', () => this.emit('runtime'));
+    this.runtime.on('warning', ({ message }: { message: string }) => { this.runtimeNotice = message; this.emit('runtime'); });
     this.runtime.on('log', (entry) => this.emit('log', entry));
     if (options.watch) this.watcher = watchProject(location, () => void this.reloadFromDisk());
   }

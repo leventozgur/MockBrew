@@ -70,9 +70,10 @@ function asText(value: unknown): string {
 /**
  * Expand only allowlisted tokens. For JSON, ordinary tokens work inside string
  * literals and `{{json request.body.$.item}}` inserts a whole JSON value.
- * Missing values become an empty string or null, respectively.
+ * Missing values become an empty string or null, respectively. HTML and XML
+ * modes entity-escape inserted values; plain text and headers remain unchanged.
  */
-export function expandTokens(input: string, context: TokenContext, json = false): string {
+export function expandTokens(input: string, context: TokenContext, json: boolean | 'markup' = false): string {
   let result = '';
   let insideString = false;
   let escaped = false;
@@ -91,9 +92,10 @@ export function expandTokens(input: string, context: TokenContext, json = false)
         const raw = input.slice(i, end + 2);
         const token = input.slice(i + 2, end).trim();
         const jsonForm = token.startsWith('json ');
-        if (isKnown(token) && (!json || (jsonForm ? !insideString : insideString))) {
+        if (isKnown(token) && (json !== true || (jsonForm ? !insideString : insideString))) {
           const value = resolve(jsonForm ? token.slice(5) : token, context);
-          result += jsonForm ? JSON.stringify(value ?? null) : json ? JSON.stringify(asText(value)).slice(1, -1) : asText(value);
+          const text = jsonForm ? JSON.stringify(value ?? null) : asText(value);
+          result += json === true && !jsonForm ? JSON.stringify(text).slice(1, -1) : json === 'markup' ? text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char]!) : text;
         } else result += raw;
         i = end + 2;
         continue;
@@ -101,7 +103,7 @@ export function expandTokens(input: string, context: TokenContext, json = false)
     }
     const char = input[i]!;
     result += char;
-    if (json) {
+    if (json === true) {
       if (escaped) escaped = false;
       else if (insideString && char === '\\') escaped = true;
       else if (char === '"') insideString = !insideString;

@@ -148,6 +148,10 @@ describe('dynamic values', () => {
     const text = await (await fetch(`${reopened.runtime.status().url}/big`)).text();
     expect(text.endsWith('"t":"{{uuid}}"}')).toBe(true);
     expect(warnings.join()).toContain('larger than 5 MB');
+    expect(reopened.view().runtimeNotice).toContain('larger than 5 MB');
+    expect(reopened.runtime.status().notes?.join()).toContain('larger than 5 MB');
+    await (await fetch(`${reopened.runtime.status().url}/big`)).arrayBuffer();
+    expect(warnings).toHaveLength(1);
   });
 
   it('ignores a forged private header from a backend or client', async () => {
@@ -362,4 +366,61 @@ describe('multipart uploads', () => {
     await post({ 'Content-Type': 'application/octet-stream', [REQUEST_ID_HEADER]: '5' });
     expect(seen[1]!.id).toBeUndefined();
   });
+});
+
+
+describe('front response follow-ups', () => {
+  it('returns GET headers for HEAD and logs substituted and file bodies', async () => {
+    const { service, collection, base } = await project();
+    await service.updateSettings({ logBodies: true });
+    await dynamicScenario(service, collection, 'GET', '/hello', '{"value":"{{request.query.x}}"}');
+    await fs.writeFile(path.join(dir, 'hello.txt'), 'file content');
+    const id = await service.createEndpoint(collection, { method: 'GET', path: '/file', scenarios: [{ body: '{}' }] });
+    await service.setScenarioFile(id, service.findEndpoint(id).scenarios[0]!.id, 'hello.txt');
+    await service.start();
+    for (const route of ['/hello?x=hello', '/file']) {
+      const get = await fetch(base() + route); const body = await get.text();
+      const head = await fetch(base() + route, { method: 'HEAD' });
+      expect(head.headers.get('content-type')).toBe(get.headers.get('content-type'));
+      expect(head.headers.get('content-length')).toBe(String(Buffer.byteLength(body)));
+      expect(await head.text()).toBe('');
+    }
+    expect(service.runtime.logs().filter((entry) => entry.path === '/hello').map((entry) => entry.responseBody)).toEqual(['{"value":"hello"}', '{"value":"hello"}']);
+    expect(service.runtime.logs().filter((entry) => entry.path === '/file').map((entry) => entry.responseBody)).toEqual(['[file hello.txt, 12 bytes]', '[file hello.txt, 12 bytes]']);
+  });
+
+  it.each(['text/html', 'application/xml', 'text/xml', 'text/plain'])('escapes inserted values for %s', async (contentType) => {
+    const { service, collection, base } = await project();
+    await dynamicScenario(service, collection, 'GET', '/text', 'value={{request.query.x}}', { headers: [{ key: 'Content-Type', value: contentType }] });
+    await service.start();
+    const value = `<a x="b">&'`;
+    const response = await fetch(`${base()}/text?x=${encodeURIComponent(value)}`);
+    expect(await response.text()).toBe(contentType === 'text/plain' ? `value=${value}` : 'value=&lt;a x=&quot;b&quot;&gt;&amp;&apos;');
+  });
+});
+
+it('processes chunked dynamic and file engine responses without a content length', async () => {
+  await fs.writeFile(path.join(dir, 'chunk.txt'), 'file bytes');
+  const route = { uuid: 'route', method: 'get', pattern: '/:kind' };
+  const backend = http.createServer((req, res) => {
+    const id = req.url?.startsWith('/file') ? 'file' : 'dynamic';
+    res.writeHead(200, { 'Content-Type': 'text/plain', [RESPONSE_HEADER]: `route:${id}` });
+    res.write('hello '); res.end('{{request.query.x}}');
+  });
+  await new Promise<void>((resolve) => backend.listen(0, '127.0.0.1', resolve));
+  closers.push(() => new Promise((resolve) => { backend.closeAllConnections(); backend.close(() => resolve()); }));
+  const port = await freePort();
+  const layer = new DynamicLayer({
+    current: () => ({ routes: [route], routeMeta: new Map([['route', { hasDynamic: true }]]), environment: { proxyMode: false }, scenarioMeta: new Map([
+      ['dynamic', { routeId: 'route', name: 'Dynamic', dynamic: true }],
+      ['file', { routeId: 'route', name: 'File', bodyFile: 'chunk.txt' }],
+    ]), globalHeaders: [], variables: {}, responseKey: '' }) as never,
+    projectDir: dir, root: () => dir, recordDirect: () => undefined, warn: () => undefined,
+  });
+  const front = new FrontServer({ host: '127.0.0.1', port, enginePort: (backend.address() as net.AddressInfo).port, hooks: layer.hooks, privateResponseHeader: RESPONSE_HEADER });
+  await front.listen(); closers.push(() => front.close());
+  expect(await (await fetch(`http://127.0.0.1:${port}/dynamic?x=there`)).text()).toBe('hello there');
+  const file = await fetch(`http://127.0.0.1:${port}/file`);
+  expect(await file.text()).toBe('file bytes');
+  expect(file.headers.get('content-length')).toBe('10');
 });

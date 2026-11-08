@@ -13,6 +13,8 @@ export interface RuntimeStatus {
   error?: string;
   startedAt?: string;
   routeCount: number;
+  /** Recent rate-limited runtime warnings. */
+  notes?: string[];
 }
 
 export interface RequestLog {
@@ -76,7 +78,7 @@ export interface ProjectView {
   lan: boolean;
   /** Set when the files on disk cannot be loaded; the last good state is still shown. */
   loadError?: string;
-  /** Set when the running server could not take over the latest change. */
+  /** Most recent runtime warning or failed update. */
   runtimeNotice?: string;
   /** What the default safe mode switches off in this project (templating, data buckets, callbacks, CRUD/WebSocket routes). */
   safeModeNotes: string[];

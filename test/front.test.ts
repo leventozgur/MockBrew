@@ -6,6 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { afterEach, expect, it } from 'vitest';
 import { FrontServer } from '../src/runtime/front.js';
 import { ProjectService } from '../src/core/service.js';
+import { engineListenerPort } from '../src/runtime/runtime.js';
 
 const fronts: FrontServer[] = [];
 const servers: http.Server[] = [];
@@ -67,7 +68,7 @@ it('streams a large request and response, preserves headers and supports keep-al
   } finally { agent.destroy(); }
 });
 
-it('runs request and bounded response hooks while streaming unknown-size responses unchanged', async () => {
+it('runs request and bounded response hooks for unknown-size responses', async () => {
   let hits = 0; let responses = 0;
   const backend = http.createServer((req, res) => {
     hits++;
@@ -77,12 +78,12 @@ it('runs request and bounded response hooks while streaming unknown-size respons
   servers.push(backend); const enginePort = await listen(backend); const port = await freePort();
   const front = new FrontServer({ host: '127.0.0.1', port, enginePort, hooks: {
     onRequest: ({ request }) => request.url === '/short' ? { status: 418, body: 'short' } : undefined,
-    onResponse: (_ctx, response) => { responses++; expect(response.body.toString()).toBe('old'); return { status: 202, headers: { 'Content-Type': 'text/plain' }, body: 'new' }; },
+    onResponse: (_ctx, response) => { responses++; return { status: 202, headers: { 'Content-Type': 'text/plain' }, body: response.body.toString() === 'old' ? 'new' : 'stream replaced' }; },
   } }); fronts.push(front); await front.listen();
   const base = `http://127.0.0.1:${port}`;
   const short = await fetch(`${base}/short`); expect(short.status).toBe(418); expect(await short.text()).toBe('short'); expect(hits).toBe(0);
   const replaced = await fetch(`${base}/replace`); expect(replaced.status).toBe(202); expect(await replaced.text()).toBe('new');
-  const streamed = await fetch(`${base}/stream`); expect(await streamed.text()).toBe('onetwo'); expect(responses).toBe(1);
+  const streamed = await fetch(`${base}/stream`); expect(await streamed.text()).toBe('stream replaced'); expect(responses).toBe(2);
 });
 
 it('keeps the engine loopback-only and closes both listeners and active sockets', async () => {
@@ -128,4 +129,22 @@ it('preserves bounded responses through no-op hooks and bypasses the hook for ov
     expect(response.status).toBe(203); expect(response.headers.getSetCookie()).toEqual(['a=1', 'b=2']); expect(await response.text()).toBe(body);
   }
   expect(calls).toBe(1);
+});
+
+
+it('fails clearly if the engine listener changes', () => {
+  expect(() => engineListenerPort({})).toThrow('Cannot determine the engine listener port; engine internals may have changed');
+  expect(() => engineListenerPort({ serverInstance: { address: () => null } })).toThrow('serverInstance.address()');
+});
+
+it('passes unknown-length responses above the cap through intact and reports the bypass', async () => {
+  const reasons: string[] = [];
+  const backend = http.createServer((_req, res) => { res.write('123'); res.end('456'); });
+  servers.push(backend); const enginePort = await listen(backend); const port = await freePort();
+  const front = new FrontServer({ host: '127.0.0.1', port, enginePort, maxBufferedResponseBytes: 4, hooks: {
+    onResponse: () => { throw new Error('must bypass'); }, onBypass: (_ctx, _headers, reason) => reasons.push(reason),
+  } });
+  fronts.push(front); await front.listen();
+  expect(await (await fetch(`http://127.0.0.1:${port}/`)).text()).toBe('123456');
+  expect(reasons).toEqual(['too-large']);
 });
