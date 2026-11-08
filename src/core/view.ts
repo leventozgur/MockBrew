@@ -176,3 +176,19 @@ export interface ModelUpdateSelection { endpointId: string; scenarioIds: string[
 
 export interface ProfilesView { profiles: import('./model.js').Profile[]; activeProfileId: string | null }
 export type ProfileRequest = import('./model.js').ProfileInput;
+
+/** A transient proxied response; it is never persisted until explicitly saved. */
+export interface Recording {
+  id: number;
+  timestamp: string;
+  method: string;
+  path: string;
+  query: string;
+  status: number;
+  headers: Header[];
+  body: string;
+  truncated: boolean;
+  warnings: string[];
+}
+export interface RecordingPreviewRequest { ids: number[]; collection: string; pathOverrides?: Record<string, string> }
+export interface TransferApplyRequest { previewHash: string; onConflict: 'skip' | 'rename' | 'replace' }

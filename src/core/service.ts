@@ -201,6 +201,41 @@ export class ProjectService extends EventEmitter {
     });
   }
 
+  private recordingPreviews = new Map<string, string>();
+
+  previewRecordings(ids: number[], collection: string, pathOverrides: Record<string, string> = {}) {
+    if (!Array.isArray(ids) || !ids.length || ids.length > 500 || new Set(ids).size !== ids.length || !ids.every(Number.isSafeInteger)) throw invalid('Select recording IDs.');
+    if (!pathOverrides || typeof pathOverrides !== 'object' || Array.isArray(pathOverrides) || Object.values(pathOverrides).some((p) => typeof p !== 'string')) throw invalid('Invalid path overrides.');
+    const recordings = this.runtime.listRecordings().recordings;
+    const selected = ids.map((id) => {
+      const item = recordings.find((entry) => entry.id === id);
+      if (!item) throw invalid(`Recording ${id} was not found.`);
+      if (item.truncated) throw invalid(`Recording ${id} is truncated and cannot be saved.`);
+      return item;
+    });
+    const endpoints = new Map<string, { method: string; path: string; description: string; responseMode: string; scenarios: unknown[] }>();
+    for (const item of selected) {
+      const path = pathOverrides[String(item.id)] ?? pathOverrides[item.path] ?? item.path;
+      const key = `${item.method} ${path}`;
+      let endpoint = endpoints.get(key);
+      if (!endpoint) { endpoint = { method: item.method, path, description: '', responseMode: 'rules', scenarios: [] }; endpoints.set(key, endpoint); }
+      endpoint.scenarios.push({ name: `Recording ${item.id}`, statusCode: item.status, headers: item.headers, body: item.body, latencyMs: 0, rules: [], rulesOperator: 'AND', default: endpoint.scenarios.length === 0 });
+    }
+    const collectionName = this.model().collections.find((c) => c.id === collection)?.name ?? collection;
+    const content = JSON.stringify({ format: 'mockbrew/bundle', version: 1, exportedAt: '1970-01-01T00:00:00.000Z', collections: [{ name: collectionName, endpoints: [...endpoints.values()] }] });
+    const preview = this.previewBundle(content);
+    this.recordingPreviews.clear();
+    this.recordingPreviews.set(preview.hash, content);
+    return { ...preview, warnings: selected.flatMap((item) => item.warnings.map((warning) => ({ id: item.id, warning }))) };
+  }
+
+  async saveRecordings(previewHash: string, onConflict: 'skip' | 'rename' | 'replace'): Promise<void> {
+    const content = this.recordingPreviews.get(previewHash);
+    if (!content) throw invalid('Recording preview was not found. Preview again.');
+    await this.applyBundle(content, previewHash, onConflict);
+    this.recordingPreviews.delete(previewHash);
+  }
+
   /** Parts of the view that only depend on the files; recomputed once per revision. */
   private derived: { revision: number; project: ProjectModel; conflicts: Conflict[]; violations: Record<string, ValidationIssue[]>; safeModeNotes: string[] } | undefined;
 

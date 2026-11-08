@@ -1,9 +1,11 @@
 import { type Environment, ServerErrorCodes, type Transaction } from '@mockoon/commons';
 import { MockoonServer } from '@mockoon/commons-server';
 import { EventEmitter } from 'node:events';
-import type { RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
+import type { Recording, RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
 import type { ProjectDocument } from '../store/document.js';
 import { type RuntimeEnvironment, type RuntimeOverrides, buildRuntimeEnvironment } from './environment.js';
+import { captureTransaction } from '../core/recording.js';
+import { invalid } from '../core/errors.js';
 import { maskHeaders, maskQuery } from './masking.js';
 
 export type { RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
@@ -45,6 +47,9 @@ export class MockRuntime extends EventEmitter {
   private nextLogId = 1;
   private logBodies = false;
   private readonly entries: RequestLog[] = [];
+  private recording = false;
+  private nextRecordingId = 1;
+  private readonly recordings: Recording[] = [];
   private readonly maxLogs: number;
 
   constructor(private readonly options: RuntimeOptions) {
@@ -68,6 +73,17 @@ export class MockRuntime extends EventEmitter {
     return this.entries.filter((e) => e.id > afterId);
   }
 
+  startRecording(): void {
+    if (this.state !== 'running' || !this.current?.environment.proxyMode || !this.current.environment.proxyHost) throw invalid('Start the server with proxy enabled before recording.');
+    this.recording = true;
+  }
+
+  stopRecording(): void { this.recording = false; }
+
+  listRecordings(): { recording: boolean; recordings: Recording[] } {
+    return { recording: this.recording, recordings: structuredClone(this.recordings) };
+  }
+
   clearLogs(): void {
     this.entries.length = 0;
   }
@@ -84,7 +100,8 @@ export class MockRuntime extends EventEmitter {
       disabledRoutes: [],
       enableAdminApi: false,
       disableTls: true,
-      maxTransactionLogs: 0,
+      // Zero makes the engine retain every transaction (slice(-0)); keep only one.
+      maxTransactionLogs: 1,
       envVarsPrefix: ENV_VARS_PREFIX,
     });
     server.on('transaction-complete', (transaction) => this.record(transaction));
@@ -139,6 +156,7 @@ export class MockRuntime extends EventEmitter {
   async update(document: ProjectDocument, overrides: RuntimeOverrides = {}): Promise<void> {
     if (!this.server) return;
     const next = buildRuntimeEnvironment(document, overrides);
+    if (!next.environment.proxyMode || !next.environment.proxyHost) this.recording = false;
     this.logBodies = document.studio.settings.logBodies;
     const { environment } = next;
     if (environment.port !== this.lastPort || environment.hostname !== this.lastHost) {
@@ -176,12 +194,18 @@ export class MockRuntime extends EventEmitter {
     await this.stopServer();
     this.server = undefined;
     this.startedAt = undefined;
+    this.recording = false;
     this.setState('stopped');
   }
 
   private record(transaction: Transaction): void {
     const current = this.current;
     const proxied = transaction.proxied === true;
+    // The engine's transaction-complete event carries the proxied response body and headers.
+    if (proxied && this.recording) {
+      this.recordings.push(captureTransaction(transaction, this.nextRecordingId++));
+      if (this.recordings.length > 500) this.recordings.shift();
+    }
     const matched = !proxied && !current?.catchAllIds.has(transaction.routeUUID);
     const entry: RequestLog = {
       id: this.nextLogId++,

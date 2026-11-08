@@ -10,6 +10,7 @@ import { registerGuide } from './guide.js';
 import { registerProfileTools } from './tools/profiles.js';
 import { registerProjectTools } from './tools/project.js';
 import { registerModelTools } from './tools/models.js';
+import { registerTransferTools } from './tools/transfer.js';
 
 const MAX_SOURCE_CHARS = 1_000_000;
 
@@ -72,6 +73,7 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
   registerProjectTools(server, service);
   registerProfileTools(server, service);
   registerModelTools(server, service);
+  registerTransferTools(server, service);
 
   server.registerTool(
     'list_collections',

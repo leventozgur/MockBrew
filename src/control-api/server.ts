@@ -9,6 +9,8 @@ import { isSea, seaAssetDir } from '../core/runtime-env.js';
 import { StudioError, invalid } from '../core/errors.js';
 import { HTTP_METHODS, type ModelLink } from '../core/model.js';
 import type { ProjectService } from '../core/service.js';
+import { exportPostman } from '../core/import/postman-export.js';
+import { transferPreviews } from '../mcp/tools/transfer.js';
 import { buildOpenApi } from '../core/openapi.js';
 import { connectionSnippets, lanAddresses } from '../core/snippets.js';
 import type { ApiErrorBody, ModelInput, MutationResponse, PollResponse } from '../core/view.js';
@@ -153,6 +155,33 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
   });
 
   const done = (id?: string): MutationResponse => ({ ...(id ? { id } : {}), view: service.view() });
+
+  const imports = transferPreviews(service);
+  const conflictStrategy = (value: unknown): 'skip' | 'rename' | 'replace' => {
+    if (value !== 'skip' && value !== 'rename' && value !== 'replace') throw invalid('Invalid conflict strategy.');
+    return value;
+  };
+  app.post('/api/import/preview', async (request) => { const body = asObject(request.body); return imports.preview(str(body.content, 'content'), str(body.format, 'format')); });
+  app.post('/api/import/apply', async (request) => { const body = asObject(request.body); await imports.apply(str(body.previewHash, 'previewHash'), conflictStrategy(body.onConflict)); return done(); });
+  app.get('/api/export', async (request, reply) => {
+    const query = request.query as { format?: string; collection?: string };
+    const format = query.format ?? 'bundle';
+    if (!['bundle', 'postman', 'openapi'].includes(format)) throw invalid('Unknown export format.');
+    const bundle = service.exportBundle(query.collection ? [query.collection] : undefined);
+    const model = service.model();
+    const filtered = query.collection ? { ...model, collections: model.collections.filter((c) => c.id === query.collection || c.name === query.collection) } : model;
+    const output = format === 'bundle' ? bundle : format === 'postman' ? exportPostman(bundle, model.name, service.runtime.status().url ?? `http://localhost:${model.settings.port}`) : buildOpenApi(filtered, { onlyActive: false });
+    return reply.header('Content-Disposition', `attachment; filename="mockbrew-${format}.json"`).type('application/json').send(output);
+  });
+  app.post('/api/recording/start', async () => { service.runtime.startRecording(); return service.runtime.listRecordings(); });
+  app.post('/api/recording/stop', async () => { service.runtime.stopRecording(); return service.runtime.listRecordings(); });
+  app.get('/api/recordings', async () => service.runtime.listRecordings());
+  app.post('/api/recordings/preview', async (request) => {
+    const body = asObject(request.body);
+    if (!Array.isArray(body.ids)) throw invalid('"ids" must be a list.');
+    return service.previewRecordings(body.ids as number[], str(body.collection, 'collection'), body.pathOverrides as Record<string, string> | undefined);
+  });
+  app.post('/api/recordings/save', async (request) => { const body = asObject(request.body); await service.saveRecordings(str(body.previewHash, 'previewHash'), conflictStrategy(body.onConflict)); return done(); });
 
   // ---------------------------------------------------------------- project
   app.get('/api/project', async () => service.view());

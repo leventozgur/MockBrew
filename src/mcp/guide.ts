@@ -14,6 +14,9 @@ Use save_scenario for 401 and 500 responses and generate_sample with empty-list 
 ## Profiles and drift
 Use save_profile to select scenarios across endpoints and activate_profile to apply it; list_profiles and deactivate_profile inspect and restore selections. Use check_models, preview_model_update, review the proposed changes, then apply_model_update with the approved preview hash and selection.
 
+## Import, export and recording
+Use preview_import and review conflicts before apply_import with its hash. Export with export_bundle. With the proxy running, start_recording, inspect list_recordings, then preview_recordings and save_recordings with the reviewed hash. Recorded bodies can contain sensitive data.
+
 ## Safety
 Model code is parsed, never executed. Source paths are restricted to the configured root. Review deletion previews before confirming. start_server uses the existing host settings; check server_status and masked get_request_logs, then stop_server. Keep safe mode enabled and avoid sensitive data in scenarios.
 `;
