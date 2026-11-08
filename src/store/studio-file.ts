@@ -1,0 +1,72 @@
+import { z } from 'zod';
+import { StudioError, invalid } from '../core/errors.js';
+
+export const STUDIO_SCHEMA_VERSION = 1;
+
+const generationSchema = z.object({
+  naming: z.enum(['identity', 'snake_case']).default('identity'),
+  dateFormat: z.enum(['iso8601', 'epoch-seconds', 'epoch-millis']).default('iso8601'),
+});
+
+const modelLinkSchema = z.object({
+  rootType: z.string().min(1),
+  settings: generationSchema,
+  sources: z.array(z.string()),
+  schema: z.record(z.string(), z.unknown()),
+});
+
+const settingsSchema = z.object({
+  cors: z
+    .object({ enabled: z.boolean().default(true), mode: z.enum(['wildcard', 'reflect']).default('wildcard') })
+    .default({ enabled: true, mode: 'wildcard' }),
+  generation: generationSchema.default({ naming: 'identity', dateFormat: 'iso8601' }),
+  logBodies: z.boolean().default(false),
+  /** Mockoon templating, data buckets, callbacks and CRUD/WebSocket routes run only when this is on. */
+  allowTemplating: z.boolean().default(false),
+});
+
+const studioFileSchema = z.object({
+  schemaVersion: z.literal(STUDIO_SCHEMA_VERSION),
+  /** Plain file name of the Mockoon environment in the same folder. */
+  environmentFile: z.string().min(1),
+  settings: settingsSchema.default({
+    cors: { enabled: true, mode: 'wildcard' },
+    generation: { naming: 'identity', dateFormat: 'iso8601' },
+    logBodies: false,
+    allowTemplating: false,
+  }),
+  collections: z.record(z.string(), z.object({ active: z.boolean() })).default({}),
+  endpoints: z.record(z.string(), z.object({ model: modelLinkSchema.optional() })).default({}),
+});
+
+export type StudioFile = z.infer<typeof studioFileSchema>;
+
+export function isPlainFileName(name: string): boolean {
+  return name.length > 0 && !/[\\/]/.test(name) && name !== '.' && name !== '..' && !name.includes('\0');
+}
+
+export function newStudioFile(environmentFile: string): StudioFile {
+  return studioFileSchema.parse({ schemaVersion: STUDIO_SCHEMA_VERSION, environmentFile });
+}
+
+/** Validates a sidecar read from disk. Unknown future major versions are never loaded silently. */
+export function parseStudioFile(raw: unknown): StudioFile {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw invalid('The studio file must contain a JSON object.');
+  const version = (raw as { schemaVersion?: unknown }).schemaVersion;
+  if (typeof version !== 'number') throw invalid('The studio file has no numeric "schemaVersion".');
+  if (version > STUDIO_SCHEMA_VERSION) {
+    throw new StudioError(
+      'UNSUPPORTED_VERSION',
+      `The studio file uses schemaVersion ${version}, but this tool only supports up to ${STUDIO_SCHEMA_VERSION}. Update the tool to open it.`,
+    );
+  }
+  const parsed = studioFileSchema.safeParse(raw);
+  if (!parsed.success) {
+    const first = parsed.error.issues[0];
+    throw invalid(`The studio file is invalid at "${first?.path.join('.') ?? ''}": ${first?.message ?? 'unknown error'}.`);
+  }
+  if (!isPlainFileName(parsed.data.environmentFile)) {
+    throw invalid('"environmentFile" must be a file name in the same folder as the studio file.');
+  }
+  return parsed.data;
+}

@@ -1,0 +1,56 @@
+{
+  "name": "@mock-api-studio/studio",
+  "version": "0.1.0",
+  "description": "Offline-first mock API studio for Android, iOS and Kotlin Multiplatform development.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "mock-studio": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "NOTICE.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "build": "npm run build:server && npm run build:ui",
+    "build:server": "tsc -p tsconfig.json",
+    "build:ui": "vite build --config ui/vite.config.ts",
+    "dev:ui": "vite --config ui/vite.config.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p ui/tsconfig.json --noEmit",
+    "lint": "npm run typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "notice": "node scripts/generate-notice.mjs",
+    "prepare": "npm run build",
+    "prepack": "npm run notice"
+  },
+  "dependencies": {
+    "@fastify/static": "10.1.9",
+    "@mockoon/commons": "9.10.0",
+    "@mockoon/commons-server": "9.10.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "chokidar": "6.0.0",
+    "fastify": "5.12.8",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.24.7",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@mockoon/cli": "9.10.0",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.2.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
+  }
+}
