@@ -119,6 +119,8 @@ export interface SnippetsResponse {
 export interface AiStatus {
   enabled: boolean;
   provider?: { id: string; name: string };
+  providers?: { id: string; name: string; version: string; isolation: 'full' | 'limited'; note?: string }[];
+  unavailable?: { id: string; name: string; note: string }[];
 }
 
 export interface AiPreview {

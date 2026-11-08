@@ -40,7 +40,9 @@ function IssueList({ issues }: { issues: Issue[] }) {
 const order = (severity: string) => (severity === 'error' ? 0 : severity === 'warning' ? 1 : 2);
 
 /** Optional AI step: shows the exact prompt first and sends nothing until it is confirmed. */
-function AiPanel({ buildRequest, onResult }: { buildRequest: () => object; onResult: (result: AiResult) => void }) {
+function AiPanel({ buildRequest, onResult, providers }: { buildRequest: () => object; onResult: (result: AiResult) => void; providers: NonNullable<AiStatus['providers']> }) {
+  const [providerId, setProviderId] = useState(providers[0]?.id ?? '');
+  const selected = providers.find((p) => p.id === providerId);
   const [instruction, setInstruction] = useState('');
   const [includeSource, setIncludeSource] = useState(false);
   const [preview, setPreview] = useState<AiPreview | null>(null);
@@ -48,7 +50,7 @@ function AiPanel({ buildRequest, onResult }: { buildRequest: () => object; onRes
   const [error, setError] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
 
-  const request = () => ({ ...buildRequest(), instruction, includeSource });
+  const request = () => ({ ...buildRequest(), instruction, includeSource, providerId });
 
   const review = async () => {
     setError(null);
@@ -77,6 +79,12 @@ function AiPanel({ buildRequest, onResult }: { buildRequest: () => object; onRes
   return (
     <div className="stack ai-panel">
       <strong>Optional: realistic data with AI</strong>
+      <Field label="AI provider">
+        <select value={providerId} onChange={(e) => { setProviderId(e.target.value); setPreview(null); }}>
+          {providers.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.version})</option>)}
+        </select>
+      </Field>
+      {selected?.isolation === 'limited' && <Banner tone="warn">Limited isolation: {selected.note}</Banner>}
       <Field label="What should the data look like?" hint="Optional, e.g. “three orders, one of them cancelled”. Without it the AI uses the field names.">
         <textarea rows={2} value={instruction} onChange={(e) => { setInstruction(e.target.value); setPreview(null); }} />
       </Field>
@@ -305,8 +313,11 @@ export function GenerateDialog({ onClose, onResult }: { onClose(): void; onResul
                 {generated ? 'Generate again' : 'Generate'}
               </button>
             </div>
-            {ai.enabled && rootType.trim() !== '' && (
+            {ai.enabled && ai.unavailable?.map((provider) => <Banner key={provider.id} tone="warn">{provider.name}: {provider.note}</Banner>)}
+            {ai.enabled && (ai.providers?.length ?? 0) === 0 && <Banner tone="warn">No enabled AI provider is available.</Banner>}
+            {ai.enabled && (ai.providers?.length ?? 0) > 0 && rootType.trim() !== '' && (
               <AiPanel
+                providers={ai.providers ?? []}
                 buildRequest={() => ({ ...input(), rootType, settings, variant, seed })}
                 onResult={(result) => {
                   setGenerated(result);

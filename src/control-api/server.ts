@@ -91,6 +91,7 @@ function aiRequest(body: Record<string, unknown>): AiRequest {
   const instruction = body.instruction === undefined ? undefined : str(body.instruction, 'instruction');
   if (instruction !== undefined && instruction.length > 2000) throw invalid('The instruction is too long (2000 characters at most).');
   return {
+    providerId: body.providerId === undefined ? undefined : str(body.providerId, 'providerId'),
     input: modelInput(body),
     rootType: str(body.rootType, 'rootType'),
     settings: settingsOf(body),
@@ -334,7 +335,7 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
 
   // --------------------------------------------------------------------- AI
   const requireAi = (): AiService => {
-    if (!options.ai) throw new StudioError('FORBIDDEN', 'AI generation is not enabled. Start the UI with --ai copilot to turn it on.');
+    if (!options.ai) throw new StudioError('FORBIDDEN', 'AI generation is not enabled. Start the UI with --ai <provider> to turn it on.');
     return options.ai;
   };
 

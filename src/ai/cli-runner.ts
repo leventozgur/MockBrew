@@ -1,16 +1,20 @@
 import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { constants, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 /** In `args`, this placeholder is replaced with an empty, private configuration folder. */
 export const CONFIG_DIR_PLACEHOLDER = '@CONFIG_DIR@';
+export const WORK_DIR_PLACEHOLDER = '@WORK_DIR@';
+export const OUTPUT_FILE_PLACEHOLDER = '@OUTPUT_FILE@';
 
 export interface CliInvocation {
   command: string;
   args: string[];
   /** Sent on stdin; undefined closes stdin immediately. */
   stdin?: string;
+  extraEnv?: string[];
+  outputFile?: boolean;
 }
 
 export interface AiProvider {
@@ -61,9 +65,10 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
   const configDir = path.join(root, 'config');
   await fs.mkdir(cwd);
   await fs.mkdir(configDir);
-  const args = invocation.args.map((a) => (a === CONFIG_DIR_PLACEHOLDER ? configDir : a));
+  const outputFile = path.join(root, 'answer');
+  const args = invocation.args.map((a) => a === CONFIG_DIR_PLACEHOLDER ? configDir : a === WORK_DIR_PLACEHOLDER ? cwd : a === OUTPUT_FILE_PLACEHOLDER ? outputFile : a);
   try {
-    return await new Promise<RunResult>((resolve) => {
+    const result = await new Promise<RunResult>((resolve) => {
       let settled = false;
       let stdout = '';
       let stderr = '';
@@ -78,7 +83,7 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
 
       const child = spawn(invocation.command, args, {
         cwd,
-        env: sanitizedEnv(process.env, options.extraEnv),
+        env: sanitizedEnv(process.env, [...(options.extraEnv ?? []), ...(invocation.extraEnv ?? [])]),
         shell: false,
         stdio: ['pipe', 'pipe', 'pipe'],
         windowsHide: true,
@@ -100,6 +105,8 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
         stdout += chunk.toString('utf8');
       });
       child.stderr.on('data', (chunk: Buffer) => {
+        bytes += chunk.length;
+        if (bytes > MAX_OUTPUT_BYTES) return stop('too-large', 'The AI CLI produced too much output.');
         stderr = (stderr + chunk.toString('utf8')).slice(-4000);
       });
       child.on('error', (error: NodeJS.ErrnoException) => {
@@ -114,6 +121,18 @@ export async function runCli(invocation: CliInvocation, options: RunOptions): Pr
       child.stdin.on('error', () => undefined);
       child.stdin.end(invocation.stdin ?? '');
     });
+    if (result.ok && invocation.outputFile) {
+      try {
+        const handle = await fs.open(outputFile, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+        try {
+          const stat = await handle.stat();
+          if (!stat.isFile() || stat.size > MAX_OUTPUT_BYTES) return { ok: false, kind: 'too-large', message: 'The AI CLI produced too much output.' };
+          const output = await handle.readFile('utf8');
+          if (output.trim()) return { ok: true, stdout: output };
+        } finally { await handle.close(); }
+      } catch { /* Fall back to stdout when the output file is absent. */ }
+    }
+    return result;
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

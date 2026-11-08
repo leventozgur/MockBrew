@@ -5,10 +5,12 @@ import type { AiPreview, AiResult, AiStatus, BuiltSchema, ModelInput } from '../
 import type { Variant } from '../generator/index.js';
 import type { Issue } from '../parser/ir.js';
 import { type GenerationSettings, validateBody } from '../schema/index.js';
-import { type AiProvider, extractJson, runCli } from './cli-runner.js';
+import { type AiProvider, runCli } from './cli-runner.js';
+import { parseProviderOutput, type ProviderInfo } from './registry.js';
 import { buildPrompt } from './prompt.js';
 
 export interface AiRequest {
+  providerId?: string;
   input: ModelInput;
   rootType: string;
   settings?: Partial<GenerationSettings>;
@@ -28,12 +30,26 @@ function digest(prompt: string): string {
 export class AiService {
   constructor(
     private readonly models: ModelService,
-    private readonly provider: AiProvider,
+    private readonly providers: AiProvider | { info: ProviderInfo; provider: AiProvider }[],
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
+    private readonly unavailable: { id: string; name: string; note: string }[] = [],
   ) {}
 
   status(): AiStatus {
-    return { enabled: true, provider: { id: this.provider.id, name: this.provider.name } };
+    const providers = this.list();
+    return { enabled: true, providers: providers.map((p) => p.info), provider: providers[0]?.info, unavailable: this.unavailable };
+  }
+
+  private list(): { info: ProviderInfo; provider: AiProvider }[] {
+    if (Array.isArray(this.providers)) return this.providers;
+    return [{ provider: this.providers, info: { id: this.providers.id, name: this.providers.name, version: '', isolation: 'limited' } }];
+  }
+
+  private select(id?: string): { info: ProviderInfo; provider: AiProvider } {
+    const entries = this.list();
+    const selected = id ? entries.find((entry) => entry.info.id === id) : entries.length === 1 ? entries[0] : undefined;
+    if (!selected) throw new StudioError('FORBIDDEN', 'Select an enabled and detected AI provider.');
+    return selected;
   }
 
   private async prepare(request: AiRequest): Promise<{ built: BuiltSchema; prompt: string }> {
@@ -46,26 +62,29 @@ export class AiService {
 
   /** Shows what would be sent. Nothing is started here. */
   async preview(request: AiRequest): Promise<AiPreview> {
+    const { info, provider } = this.select(request.providerId);
     const { prompt } = await this.prepare(request);
-    const { command } = this.provider.invocation(prompt);
+    const { command } = provider.invocation(prompt);
     return {
-      provider: { id: this.provider.id, name: this.provider.name },
+      provider: { id: info.id, name: info.name },
       command,
       prompt,
-      hash: digest(prompt),
+      hash: digest(`${info.id}\0${prompt}`),
       includesSource: Boolean(request.includeSource),
       bytes: Buffer.byteLength(prompt),
       notes: [
-        `The text above is sent to ${this.provider.name}, which forwards it to its service.`,
-        'The CLI runs without tools (no shell, no file access) in an empty temporary folder.',
+        `The text above is sent to ${info.name}, which forwards it to its service.`,
+        info.isolation === 'full' ? 'The CLI runs with tools disabled in an empty temporary folder.' : 'The CLI runs in an empty temporary folder with limited isolation.',
+        ...(info.note ? [info.note] : []),
         'The answer is validated against the model; the local generator is used if it fails.',
       ],
     };
   }
 
   async generate(request: AiRequest, confirm: string, signal?: AbortSignal): Promise<AiResult> {
+    const { provider } = this.select(request.providerId);
     const { built, prompt } = await this.prepare(request);
-    if (confirm !== digest(prompt)) {
+    if (confirm !== digest(`${provider.id}\0${prompt}`)) {
       throw new StudioError('FORBIDDEN', 'The prompt differs from the one you reviewed. Preview it again and confirm.');
     }
 
@@ -74,14 +93,14 @@ export class AiService {
       return { ...local, source: 'local', fallbackReason: reason };
     };
 
-    const run = await runCli(this.provider.invocation(prompt), { timeoutMs: this.timeoutMs, signal });
+    const run = await runCli(provider.invocation(prompt), { timeoutMs: this.timeoutMs, signal });
     if (!run.ok) {
       if (run.kind === 'cancelled') throw new StudioError('INVALID', run.message);
       return fallback(run.message);
     }
     let value: unknown;
     try {
-      value = extractJson(run.stdout);
+      value = parseProviderOutput(run.stdout);
     } catch (error) {
       return fallback((error as Error).message);
     }

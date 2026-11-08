@@ -109,6 +109,12 @@ describe('AI preview and confirmation', () => {
     expect(await calls()).toEqual([]);
   });
 
+  it('rejects a provider outside the enabled set', async () => {
+    const ai = service(await fakeCli('ok'));
+    await expect(ai.preview(request({ providerId: 'other' }))).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await calls()).toEqual([]);
+  });
+
   it('refuses to run without the confirmation of exactly that prompt', async () => {
     const ai = service(await fakeCli('ok'));
     await expect(ai.generate(request(), 'wrong')).rejects.toMatchObject({ code: 'FORBIDDEN' });
@@ -237,7 +243,8 @@ describe('AI through the control API', () => {
     await off.close();
 
     const on = await startControlApi({ service: project, uiDir: path.join(dir, 'none'), ai: service(await fakeCli('ok')) });
-    const body = { files: request().input.files, rootType: 'Customer', instruction: 'a VIP customer' };
+    expect(await (await fetch(`${on.url}/api/ai/status`, { headers: { Authorization: `Bearer ${on.token}` } })).json()).toMatchObject({ providers: [{ id: 'fake', isolation: 'limited' }] });
+    const body = { files: request().input.files, rootType: 'Customer', providerId: 'fake', instruction: 'a VIP customer' };
     const preview = await (await post(on, '/api/ai/preview', body)).json();
     expect(preview.prompt).toContain('a VIP customer');
     expect((await post(on, '/api/ai/generate', { ...body, confirm: 'nope' })).status).toBe(403);
