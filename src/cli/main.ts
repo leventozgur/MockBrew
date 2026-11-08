@@ -4,6 +4,7 @@ import { setFlagsFromString } from 'node:v8';
 import { StudioError } from '../core/errors.js';
 import { shutdownParser } from '../parser/index.js';
 import { UsageError, consoleIo, packageVersion } from './common.js';
+import { doctorCommand, doctorHelp } from './commands/doctor.js';
 import { checkCommand, checkHelp } from './commands/check.js';
 import { exportCommand, exportHelp } from './commands/export.js';
 import { generateCommand, generateHelp } from './commands/generate.js';
@@ -21,6 +22,7 @@ const mainHelp = `mockbrew - offline mock API studio for Android, iOS and Kotlin
 Usage: mockbrew <command> [options]
 
 Commands:
+  doctor     Diagnose the installation and project
   init       Create a project
   ui         Start the local web UI
   serve      Run a project's mocks without the UI
@@ -34,6 +36,7 @@ Commands:
 Run "mockbrew <command> --help" for details.`;
 
 const helps: Record<string, string> = {
+  doctor: doctorHelp,
   init: initHelp,
   ui: uiHelp,
   serve: serveHelp,
@@ -70,6 +73,8 @@ async function run(argv: string[]): Promise<void> {
   }
   checkNode();
   switch (command) {
+    case 'doctor':
+      return doctorCommand(rest, consoleIo);
     case 'init':
       return initCommand(rest, consoleIo);
     case 'ui':

@@ -60,6 +60,8 @@ A project that already uses Node (for example, React Native or KMP web) can add 
 
 **After npm publication**, use `npx mockbrew <command>` or `npm install -g mockbrew`.
 
+**After the first release**, prebuilt single binaries are planned for macOS, Linux and Windows, with no Node installation required. Install paths will include a Homebrew tap (`brew install <tap>/mockbrew`), Scoop (`scoop install mockbrew` after adding the bucket), and direct downloads from the GitHub Releases page. The tap, bucket, and release URLs will be announced when available.
+
 Check the installation with `mockbrew --version`.
 
 ## Usage

@@ -1,0 +1,94 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-14, os: macos, arch: arm64 }
+          - { runner: macos-13, os: macos, arch: x64 }
+          - { runner: ubuntu-latest, os: linux, arch: x64 }
+          - { runner: ubuntu-24.04-arm, os: linux, arch: arm64 }
+          - { runner: windows-latest, os: windows, arch: x64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          architecture: ${{ matrix.arch }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: node scripts/sea/build.mjs
+      - name: Smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="$PWD/dist-bin/mockbrew-${{ matrix.os }}-${{ matrix.arch }}"
+          if [ "${{ matrix.os }}" = windows ]; then binary="$binary.exe"; fi
+          "$binary" --version
+          "$binary" init "$RUNNER_TEMP/mockbrew-smoke" --port 38991
+          "$binary" doctor --project "$RUNNER_TEMP/mockbrew-smoke"
+          "$binary" generate -m test/fixtures/kotlin/GsonModels.kt --list
+          "$binary" serve --project "$RUNNER_TEMP/mockbrew-smoke" > "$RUNNER_TEMP/mockbrew-serve.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl --max-time 2 -s -o /dev/null http://127.0.0.1:38991/; then exit 0; fi
+            sleep 1
+          done
+          cat "$RUNNER_TEMP/mockbrew-serve.log"
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mockbrew-${{ matrix.os }}-${{ matrix.arch }}
+          path: dist-bin/*
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: binary
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: cat artifacts/*.sha256 | sort -k2 > artifacts/SHA256SUMS
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/mockbrew-* artifacts/SHA256SUMS --draft --title "$GITHUB_REF_NAME"
+  npm:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - name: Check npm token
+        id: token
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: if [ -n "$NODE_AUTH_TOKEN" ]; then echo 'available=true' >> "$GITHUB_OUTPUT"; fi
+      - name: Publish with provenance
+        if: steps.token.outputs.available == 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public
