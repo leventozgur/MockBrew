@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type Collection, type Endpoint, HTTP_METHODS, type HttpMethod, type ModelLink } from '../../../src/core/model';
-import type { MutationResponse } from '../../../src/core/view';
+import type { ModelCheck, MutationResponse } from '../../../src/core/view';
 import { api } from '../api';
 import { useStudio } from '../store';
 import { Badge, Banner, Dialog, Field, MethodBadge } from './ui';
@@ -221,6 +221,7 @@ export function EndpointsPanel() {
   const [newCollection, setNewCollection] = useState('');
   const [addingTo, setAddingTo] = useState<Collection | null>(null);
   const [checking, setChecking] = useState(false);
+  const [modelChecks, setModelChecks] = useState<ModelCheck[]>([]);
 
   if (!view) return null;
 
@@ -290,6 +291,7 @@ export function EndpointsPanel() {
                   <button className={`endpoint-item${endpoint?.id === e.id ? ' endpoint-item-active' : ''}${collection.active ? '' : ' muted'}`} onClick={() => setSelected(e.id)}>
                     <MethodBadge method={e.method} />
                     <span className="endpoint-path">{e.path}</span>
+                    {modelChecks.some((c) => c.endpointId === e.id && c.status === 'drift') && <Badge tone="warn">model changed</Badge>}
                     {view.conflicts.some((c) => c.endpointIds.includes(e.id)) && <span title="Route conflict">⚠</span>}
                   </button>
                 </li>
@@ -323,7 +325,7 @@ export function EndpointsPanel() {
           </div>
         )}
       </main>
-      {checking && <ModelCheckDialog onClose={() => setChecking(false)} />}
+      {checking && <ModelCheckDialog onClose={() => setChecking(false)} onChecks={setModelChecks} />}
       {addingTo && <NewEndpointDialog collection={addingTo} onClose={() => setAddingTo(null)} onCreated={setSelected} />}
     </div>
   );

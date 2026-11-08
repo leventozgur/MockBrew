@@ -143,3 +143,10 @@ textarea.code { width: 100%; background: var(--code-bg); resize: vertical; }
 .conditions { border-top: 1px solid var(--border, #ddd); padding-top: 1rem; }
 .condition-row { padding: 0.5rem; border: 1px solid var(--border, #ddd); border-radius: 6px; }
 .condition-error { color: #b42318; font-size: 0.85rem; }
+
+/* Model update review */
+.model-diff { max-height: 20rem; overflow: auto; border: 1px solid var(--border, #ccc); border-radius: 4px; }
+.model-diff pre { margin: 0; padding: .5rem; white-space: pre; }
+.model-diff pre span { display: block; min-height: 1em; }
+.model-diff-added { background: rgba(35, 160, 80, .18); }
+.model-diff-removed { background: rgba(210, 60, 60, .18); }
