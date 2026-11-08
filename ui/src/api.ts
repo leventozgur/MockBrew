@@ -39,3 +39,29 @@ export async function api<T>(method: string, path: string, body?: unknown, signa
   }
   return data as T;
 }
+
+/** Download the authenticated export, retaining the filename supplied by the server. */
+export async function downloadExport(format: string, collections: string[]): Promise<void> {
+  const token = sessionStorage.getItem(TOKEN_KEY) ?? '';
+  const fetchExport = async (collection?: string) => {
+    const query = new URLSearchParams({ format });
+    if (collection) query.set('collection', collection);
+    const response = await fetch(`/api/export?${query}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!response.ok) {
+      const data = await response.json() as ApiErrorBody;
+      throw new ApiError(data.error?.code ?? 'ERROR', data.error?.message ?? response.statusText, response.status);
+    }
+    return response;
+  };
+  const responses = await Promise.all((collections.length ? collections : [undefined]).map(fetchExport));
+  const filename = /filename="([^"/\\]+)"/.exec(responses[0]!.headers.get('Content-Disposition') ?? '')?.[1] ?? 'mockbrew-export.json';
+  let blob: Blob;
+  if (responses.length === 1) blob = await responses[0]!.blob();
+  else {
+    const bundles = await Promise.all(responses.map((response) => response.json() as Promise<{ format: string; version: number; exportedAt: string; collections: unknown[] }>));
+    blob = new Blob([JSON.stringify({ ...bundles[0], collections: bundles.flatMap((bundle) => bundle.collections) }, null, 2)], { type: 'application/json' });
+  }
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = filename; link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

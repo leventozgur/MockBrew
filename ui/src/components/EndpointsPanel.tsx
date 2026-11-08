@@ -215,9 +215,10 @@ function EndpointEditor({ endpoint, collections }: { endpoint: Endpoint; collect
   );
 }
 
-export function EndpointsPanel() {
+export function EndpointsPanel({ selectedEndpoint }: { selectedEndpoint: string | null }) {
   const { view, act } = useStudio();
   const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => { if (selectedEndpoint) setSelected(selectedEndpoint); }, [selectedEndpoint]);
   const [newCollection, setNewCollection] = useState('');
   const [addingTo, setAddingTo] = useState<Collection | null>(null);
   const [checking, setChecking] = useState(false);

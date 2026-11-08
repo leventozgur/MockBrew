@@ -8,13 +8,15 @@ import { ProfilesPanel } from './components/ProfilesPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Badge, Banner } from './components/ui';
 import { useStudio } from './store';
+import { ExportDialog, ImportDialog, RecordingPanel } from './components/Transfer';
 
-type Tab = 'endpoints' | 'profiles' | 'logs' | 'connect' | 'settings';
+type Tab = 'endpoints' | 'profiles' | 'logs' | 'connect' | 'settings' | 'recording';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'endpoints', label: 'Endpoints' },
   { id: 'profiles', label: 'Profiles' },
   { id: 'logs', label: 'Requests' },
+  { id: 'recording', label: 'Recording' },
   { id: 'connect', label: 'Connect app' },
   { id: 'settings', label: 'Settings' },
 ];
@@ -52,6 +54,8 @@ function RuntimeControl() {
 export function App() {
   const { view, notice, dismissNotice, sessionLost } = useStudio();
   const [tab, setTab] = useState<Tab>('endpoints');
+  const [transfer, setTransfer] = useState<'import' | 'export' | null>(null);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
 
   if (sessionLost) {
     return (
@@ -77,6 +81,8 @@ export function App() {
             </button>
           ))}
         </nav>
+        <button className="button" onClick={() => setTransfer('import')}>Import</button>
+        <button className="button" onClick={() => setTransfer('export')}>Export</button>
         <RuntimeControl />
       </header>
       {view.loadError && <Banner tone="error">The project files on disk cannot be loaded (showing the last good state): {view.loadError}</Banner>}
@@ -97,12 +103,15 @@ export function App() {
         </Banner>
       )}
       <div className="content">
-        {tab === 'endpoints' && <EndpointsPanel />}
+        {tab === 'endpoints' && <EndpointsPanel selectedEndpoint={selectedEndpoint} />}
         {tab === 'profiles' && <ProfilesPanel />}
         {tab === 'logs' && <LogsPanel />}
+        {tab === 'recording' && <RecordingPanel />}
         {tab === 'connect' && <ConnectPanel />}
         {tab === 'settings' && <SettingsPanel />}
       </div>
+      {transfer === 'import' && <ImportDialog onClose={() => setTransfer(null)} onApplied={(id) => { setSelectedEndpoint(id); setTab('endpoints'); }} />}
+      {transfer === 'export' && <ExportDialog onClose={() => setTransfer(null)} />}
     </div>
   );
 }

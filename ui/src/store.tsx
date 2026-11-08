@@ -13,6 +13,7 @@ interface Studio {
   view: ProjectView | null;
   profiles: ProfilesView | null;
   refreshProfiles(): Promise<void>;
+  applyView(view: ProjectView): void;
   logs: RequestLog[];
   notice: Notice | null;
   dismissNotice(): void;
@@ -96,8 +97,8 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   }, [act]);
 
   const value = useMemo<Studio>(
-    () => ({ view, profiles, refreshProfiles, logs, notice, dismissNotice: () => setNotice(null), sessionLost, act, clearLogs }),
-    [view, profiles, refreshProfiles, logs, notice, sessionLost, act, clearLogs],
+    () => ({ view, profiles, refreshProfiles, applyView, logs, notice, dismissNotice: () => setNotice(null), sessionLost, act, clearLogs }),
+    [view, profiles, refreshProfiles, applyView, logs, notice, sessionLost, act, clearLogs],
   );
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
