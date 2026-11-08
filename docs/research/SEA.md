@@ -1,6 +1,6 @@
 # Node SEA feasibility spike (M6), round 2
 
-Date: 2026-11-08. Host: macOS arm64. **Recommendation: promising prototype, not release-ready; M6 remains open.** The executable passed the requested vertical slice with a watcher workaround, but ordinary `serve` failed in this sandbox and the full npm suite did not pass. The same-host results do not establish distribution or another machine's behavior.
+Date: 2026-11-08. Host: macOS arm64. **Recommendation: promising prototype, not release-ready; see the coordinator verification at the end, which supersedes the sandbox failures below.** The executable passed the requested vertical slice with a watcher workaround, but ordinary `serve` failed in this sandbox and the full npm suite did not pass. The same-host results do not establish distribution or another machine's behavior.
 
 ## Build
 
@@ -38,3 +38,12 @@ The SEA worker relaunches the executable with IPC, and npm mode retains the exis
 - `CHOKIDAR_USEPOLLING=1 npm test`: FAIL: 1 file failed, 8 passed; 7 MCP tests failed with connection closed, 109 passed. Polling resolved the CLI test in this run; the MCP failures are not diagnosed.
 
 The coordinator should run the full suite outside the sandbox. Before release, investigate native watcher and MCP failures; repeat the entire matrix without overrides on a clean macOS machine; verify worker behavior and embedded assets without repository dependencies; harden extraction and update/cleanup; pin a supported Node and injector; validate other architectures and operating systems separately; set up CI, Developer ID signing, notarization, Gatekeeper and distribution checks. Linux and Windows binaries, notarization and release CI were out of scope.
+
+## Coordinator verification outside the sandbox (2026-11-08)
+
+The agent's failures (`EMFILE` on file watching, MCP connection closed) came from its execution sandbox. Re-run on the same Mac without that sandbox, after rebasing onto `main`:
+
+- `npm run lint`: pass. `npm test`: 9 files, 119 tests passed.
+- `scripts/sea/out/mock-studio --version` -> `0.1.0`; `init` created a project; `serve` started **without** `CHOKIDAR_USEPOLLING` and answered an unmatched request with the JSON 404; `generate -m test/fixtures/kotlin/GsonModels.kt --list` listed the types through the self-relaunched parser worker.
+
+Updated recommendation: **SEA is viable on macOS arm64 for this application.** Still open before M13 relies on it: a supported pinned runtime (Node 22 or 24 LTS, single-architecture binary), a cross-platform cache directory (the prototype uses `~/Library/Caches`), Linux and Windows builds, clean-machine tests, and signing/notarization.
