@@ -95,6 +95,14 @@ describe('control API security', () => {
 });
 
 describe('control API workflows', () => {
+  it('manages variables through authenticated routes', async () => {
+    expect((await call('/api/variables', { token: null })).status).toBe(401);
+    expect((await call('/api/variables', { method: 'PUT', body: { base: 'value' } })).status).toBe(200);
+    expect(await (await call('/api/variables')).json()).toEqual({ base: 'value' });
+    expect((await call('/api/variables', { method: 'PUT', body: { 'bad-name': 'x' } })).status).toBe(400);
+    expect((await call('/api/variables/base', { method: 'DELETE' })).status).toBe(200);
+    expect(await (await call('/api/variables')).json()).toEqual({});
+  });
   it('manages collections, endpoints and scenarios', async () => {
     let res = await call('/api/collections', { method: 'POST', body: { name: 'Users' } });
     const { id: collectionId } = await res.json();

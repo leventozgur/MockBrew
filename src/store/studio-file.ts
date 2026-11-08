@@ -34,6 +34,14 @@ export const profileSchema = z.object({
   network: z.object({ latencyMs: z.number().int().min(0).max(60000).optional(), timeoutEndpoints: z.union([z.literal('all'), z.array(z.string().min(1).max(200)).max(1000)]).optional(), timeoutMs: z.number().int().min(1).max(600000).optional() }).passthrough().optional(),
 }).passthrough();
 
+// Keep all identifier names, including "__proto__", as own data properties.
+// Parsing a z.record into an ordinary object silently drops that valid name.
+const variablesSchema = z.custom<Record<string, string>>((value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length <= 100 && entries.every(([key, item]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && typeof item === 'string' && Buffer.byteLength(item, 'utf8') <= 2048);
+}, 'Invalid variables.');
+
 // Version 2 readers preserve unknown fields via passthrough; these optional additions need no migration.
 const studioFileSchema = z.object({
   schemaVersion: z.literal(STUDIO_SCHEMA_VERSION),
@@ -49,6 +57,8 @@ const studioFileSchema = z.object({
   }),
   profiles: z.record(z.string().min(1).max(200), profileSchema).refine((v) => Object.keys(v).length <= 200, 'Too many profiles.').default({}),
   activeProfileId: z.string().min(1).max(200).nullable().optional(),
+  /** Plaintext configuration only; never store secrets here. */
+  variables: variablesSchema.default({}),
   collections: z.record(z.string(), z.object({ active: z.boolean() }).passthrough()).default({}),
   endpoints: z.record(z.string(), z.object({ model: modelLinkSchema.optional() }).passthrough()).default({}),
 }).passthrough();

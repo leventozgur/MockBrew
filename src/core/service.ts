@@ -149,6 +149,29 @@ export class ProjectService extends EventEmitter {
   deleteCerts() { if (this.document.studio.settings.https.enabled) throw invalid('Disable HTTPS before deleting certificates.'); deleteCertificates(this.location.dir); }
   caCertificate() { if (!this.certStatus().exists) throw invalid('Create certificates first.'); return readFileSync(certificatePaths(this.location.dir).ca, 'utf8'); }
 
+  /** Variables are stored in plaintext in the sidecar; they must not contain secrets. */
+  listVariables(): Record<string, string> {
+    return structuredClone(this.document.studio.variables);
+  }
+
+  setVariables(values: unknown): Promise<void> {
+    return this.mutate((doc) => {
+      if (!values || typeof values !== 'object' || Array.isArray(values)) throw invalid('Variables must be an object.');
+      const entries = Object.entries(values);
+      if (entries.some(([key, value]) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > 2048)) throw invalid('Variable names must be identifiers and values must be strings of at most 2 KB.');
+      const next = Object.fromEntries([...Object.entries(doc.studio.variables), ...entries]) as Record<string, string>;
+      if (Object.keys(next).length > 100) throw invalid('At most 100 variables are allowed.');
+      doc.studio.variables = next;
+    });
+  }
+
+  deleteVariable(name: string): Promise<void> {
+    return this.mutate((doc) => {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw invalid('Invalid variable name.');
+      delete doc.studio.variables[name];
+    });
+  }
+
   exportBundle(collections?: string[]) { return exportBundle(this.model(), collections); }
 
   previewBundle(content: string) {

@@ -42,13 +42,21 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'set_variables', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
     expect((await call('apply_model_update', { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'invalid' })).isError).toBe(true);
     const save = tools.find((t) => t.name === 'save_scenario');
     expect(save?.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('manages plaintext variables', async () => {
+    expect((await call('set_variables', { operation: 'set', values: { base: 'example' } })).json().variables).toEqual({ base: 'example' });
+    expect((await call('set_variables', { operation: 'list' })).json().variables).toEqual({ base: 'example' });
+    expect((await call('set_variables', { operation: 'delete', name: 'base' })).json().variables).toEqual({});
+    expect((await call('set_variables', { operation: 'set', values: { 'bad-name': 'x' } })).isError).toBe(true);
+    expect((await call('set_variables', { operation: 'set', values: JSON.parse('{"__proto__":"value"}') })).json().variables).toEqual(JSON.parse('{"__proto__":"value"}'));
   });
 
   it('lists and reads the guide and prompts over stdio', async () => {

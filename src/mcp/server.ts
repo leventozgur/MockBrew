@@ -11,6 +11,7 @@ import { registerProfileTools } from './tools/profiles.js';
 import { registerProjectTools } from './tools/project.js';
 import { registerModelTools } from './tools/models.js';
 import { registerTransferTools } from './tools/transfer.js';
+import { registerDynamicTools } from './tools/dynamic.js';
 
 const MAX_SOURCE_CHARS = 1_000_000;
 
@@ -74,6 +75,7 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
   registerProfileTools(server, service);
   registerModelTools(server, service);
   registerTransferTools(server, service);
+  registerDynamicTools(server, service);
 
   server.registerTool(
     'list_collections',

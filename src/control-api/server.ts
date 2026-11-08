@@ -186,6 +186,10 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
   // ---------------------------------------------------------------- project
   app.get('/api/project', async () => service.view());
 
+  app.get('/api/variables', async () => service.listVariables());
+  app.put('/api/variables', async (request) => { await service.setVariables(asObject(request.body)); return done(); });
+  app.delete('/api/variables/:name', async (request) => { await service.deleteVariable((request.params as { name: string }).name); return done(); });
+
   app.get('/api/profiles', async () => service.listProfiles());
   app.post('/api/profiles', async (request) => done(await service.saveProfile(asObject(request.body) as never)));
   app.put('/api/profiles/:id', async (request) => done(await service.saveProfile(asObject(request.body) as never, (request.params as { id: string }).id)));
