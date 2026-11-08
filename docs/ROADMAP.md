@@ -175,7 +175,7 @@ Principle: Every new feature is implemented in core and made available through *
 **Status (2026-11-08): in progress.**
 - Done: git repository (local, no remote) with company references removed; flaky `test/ai.test.ts` fixed (5 consecutive focused runs and full suite passed); `windows-latest` added to the CI matrix; docs translated to English; CONTRIBUTING, SECURITY, CHANGELOG and issue/PR templates; `npm audit` note and periodic dependency review step; Playwright E2E suite (`npm run test:e2e`, 1 scenario covering scenario editing, live switching, logs and local generation; passed locally) and a separate CI job.
 - SEA prototype: works on macOS arm64 (see [SEA research](research/SEA.md)); release work remains for M13.
-- Open: CI has never run (no GitHub repository yet); name decided: **MockBrew** (user, 2026-11-08; the previous name was taken). Package/command `mockbrew`, free on npm and Homebrew on 2026-11-08; GitHub not verified.
+- CI (2026-11-08, github.com/leventozgur/MockBrew): green on ubuntu, macOS and Windows with Node 22 and 24 plus the E2E job, after Windows fixes (npm `.cmd` shims launched without a shell via `src/core/launch.ts`, PATHEXT lookup, drive-root access checks, portable tests). Previously open: name decided: **MockBrew** (user, 2026-11-08; the previous name was taken). Package/command `mockbrew`, free on npm and Homebrew on 2026-11-08; GitHub not verified.
 
 ### Milestone 7: Conditional responses (rule engine)
 
