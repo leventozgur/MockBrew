@@ -1,0 +1,1 @@
+{"openapi":"3.1.0","paths":{"/items/{id}":{"get":{"tags":["Items"],"responses":{"200":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/Item"}}}},"404":{"content":{"text/plain":{"example":"missing"}}}}}}},"components":{"schemas":{"Item":{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}}}}

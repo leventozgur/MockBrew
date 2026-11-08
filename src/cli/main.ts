@@ -30,7 +30,7 @@ Commands:
   profiles   List test profiles (profiles list)
   generate   Create a JSON body from Kotlin/Swift models
   check      Compare linked models and saved bodies with the current source code
-  import     Import a MockBrew bundle
+  import     Import a bundle, Postman, OpenAPI, HAR or cURL file
   export     Write a bundle, Postman collection or OpenAPI document
   snippets   Debug network setup for emulators, simulators and devices
   mcp        Start the MCP server (stdio) for Kiro / Copilot

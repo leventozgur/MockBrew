@@ -1,0 +1,1 @@
+curl -X POST -H 'Content-Type: application/json' --data '{"name":"synthetic"}' 'https://example.test/items?q=1'

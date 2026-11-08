@@ -166,8 +166,9 @@ export class ProjectService extends EventEmitter {
         const conflicts = preview.conflicts.filter((c) => c.collection === incoming.name);
         let name = incoming.name;
         if (strategy === 'rename' && (existing || conflicts.length)) {
+          name = `${incoming.name.slice(0, 88)} (imported)`;
           let n = 2;
-          while (doc.snapshot().collections.some((c) => c.name.toLowerCase() === name.toLowerCase())) name = `${incoming.name.slice(0, 90)} (${n++})`;
+          while (doc.snapshot().collections.some((c) => c.name.toLowerCase() === name.toLowerCase())) name = `${incoming.name.slice(0, 82)} (imported ${n++})`;
           existing = undefined;
         }
         const collectionId = existing?.id ?? doc.addCollection(name);
@@ -176,7 +177,23 @@ export class ProjectService extends EventEmitter {
           const collisions = doc.snapshot().collections.flatMap((c) => c.endpoints.filter((e) =>
             e.method === endpoint.method && pathShape(e.path) === pathShape(endpoint.path) && (c.active || c.id === collectionId)));
           if (collisions.length && strategy === 'skip') continue;
-          if (collisions.length && strategy === 'replace') for (const collision of collisions) doc.removeEndpoint(collision.id);
+          if (collisions.length && strategy === 'replace') {
+            for (const collision of collisions) {
+              const first = collision.scenarios[0];
+              if (!first) throw invalid('Existing endpoint has no scenarios.');
+              for (const old of collision.scenarios.slice(1)) doc.removeScenario(collision.id, old.id);
+              const ids = [first.id];
+              doc.updateScenario(collision.id, first.id, endpoint.scenarios[0]!);
+              doc.setScenarioRules(collision.id, first.id, endpoint.scenarios[0]!.rules, endpoint.scenarios[0]!.rulesOperator);
+              for (const incomingScenario of endpoint.scenarios.slice(1)) {
+                const scenarioId = doc.addScenario(collision.id, incomingScenario);
+                doc.setScenarioRules(collision.id, scenarioId, incomingScenario.rules, incomingScenario.rulesOperator);
+                ids.push(scenarioId);
+              }
+              doc.setActiveScenario(collision.id, ids[endpoint.scenarios.findIndex((s) => s.default)]!);
+            }
+            continue;
+          }
           const id = doc.addBundleEndpoint(collectionId, endpoint);
           if (endpoint.model) doc.setModel(id, sanitizeModelLink(endpoint.model, this.root, this.location.dir));
         }

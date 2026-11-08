@@ -5,7 +5,7 @@ import { exportBundle } from '../../core/import/bundle.js';
 import { exportPostman } from '../../core/import/postman-export.js';
 import { type Io, UsageError, openProject } from '../common.js';
 
-export const exportHelp = `mockbrew export bundle|postman|openapi [--project <path>]
+export const exportHelp = `mockbrew export bundle|postman|openapi [-o <file>] [--collection <name>...] [--project <path>]
 
 Writes an OpenAPI 3.1 document built from the endpoints, scenarios and linked models of a project. Treat it
 as a contract proposal for the backend team.
@@ -13,6 +13,7 @@ as a contract proposal for the backend team.
 Options:
   -p, --project <path>   Project folder or file (default: ./ or ./mocks)
   -o, --out <file>       Write to a file instead of stdout
+      --collection <name> Select a collection (repeatable)
       --title <text>     API title (default: the project name)
       --api-version <v>  API version (default 1.0.0)
       --include-inactive Also include collections that are switched off`;
