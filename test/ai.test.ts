@@ -51,6 +51,29 @@ const calls = async (): Promise<{ args: string[]; cwd: string; entries: string[]
   }
 };
 
+async function waitForCall(timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const [call] = await calls();
+    if (call) return call;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Fake CLI did not write its record within ${timeoutMs} ms`);
+}
+
+async function expectProcessGone(pid: number, timeoutMs = 2_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Child process ${pid} was still alive after ${timeoutMs} ms`);
+}
+
 function request(extra: Record<string, unknown> = {}) {
   return { input: { files: [{ name: 'Customer.kt', content: KOTLIN }] }, rootType: 'Customer', ...extra };
 }
@@ -155,13 +178,14 @@ describe('AI generation', () => {
 
   it('falls back on timeout and kills the process', async () => {
     const started = Date.now();
-    const result = await run('hang', 400);
+    const pending = run('hang', 5_000);
+    const call = await waitForCall(4_500);
+    expect(call.pid).toBeGreaterThan(0);
+    const result = await pending;
     expect(result.source).toBe('local');
     expect(result.fallbackReason).toContain('did not answer');
     expect(Date.now() - started).toBeLessThan(10_000);
-    const [call] = await calls();
-    await new Promise((r) => setTimeout(r, 300));
-    expect(() => process.kill(call?.pid ?? 0, 0)).toThrow();
+    await expectProcessGone(call.pid);
   });
 
   it('stops the process when the request is cancelled', async () => {
@@ -169,12 +193,11 @@ describe('AI generation', () => {
     const preview = await ai.preview(request());
     const controller = new AbortController();
     const pending = ai.generate(request(), preview.hash, controller.signal);
-    await new Promise((r) => setTimeout(r, 400));
+    const call = await waitForCall();
+    expect(call.pid).toBeGreaterThan(0);
     controller.abort();
     await expect(pending).rejects.toMatchObject({ message: expect.stringContaining('cancelled') });
-    await new Promise((r) => setTimeout(r, 300));
-    const [call] = await calls();
-    expect(() => process.kill(call?.pid ?? 0, 0)).toThrow();
+    await expectProcessGone(call.pid);
   });
 });
 
