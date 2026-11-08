@@ -1,29 +1,30 @@
 import { z } from 'zod';
 import { StudioError, invalid } from '../core/errors.js';
 
-export const STUDIO_SCHEMA_VERSION = 1;
+export const STUDIO_SCHEMA_VERSION = 2;
 
 const generationSchema = z.object({
   naming: z.enum(['identity', 'snake_case']).default('identity'),
   dateFormat: z.enum(['iso8601', 'epoch-seconds', 'epoch-millis']).default('iso8601'),
-});
+}).passthrough();
 
 const modelLinkSchema = z.object({
   rootType: z.string().min(1),
   settings: generationSchema,
   sources: z.array(z.string()),
   schema: z.record(z.string(), z.unknown()),
-});
+}).passthrough();
 
 const settingsSchema = z.object({
   cors: z
-    .object({ enabled: z.boolean().default(true), mode: z.enum(['wildcard', 'reflect']).default('wildcard') })
+    .object({ enabled: z.boolean().default(true), mode: z.enum(['wildcard', 'reflect']).default('wildcard') }).passthrough()
     .default({ enabled: true, mode: 'wildcard' }),
   generation: generationSchema.default({ naming: 'identity', dateFormat: 'iso8601' }),
   logBodies: z.boolean().default(false),
   /** Mockoon templating, data buckets, callbacks and CRUD/WebSocket routes run only when this is on. */
   allowTemplating: z.boolean().default(false),
-});
+  scenarioOverrideHeader: z.boolean().default(true),
+}).passthrough();
 
 const studioFileSchema = z.object({
   schemaVersion: z.literal(STUDIO_SCHEMA_VERSION),
@@ -34,10 +35,11 @@ const studioFileSchema = z.object({
     generation: { naming: 'identity', dateFormat: 'iso8601' },
     logBodies: false,
     allowTemplating: false,
+    scenarioOverrideHeader: true,
   }),
-  collections: z.record(z.string(), z.object({ active: z.boolean() })).default({}),
-  endpoints: z.record(z.string(), z.object({ model: modelLinkSchema.optional() })).default({}),
-});
+  collections: z.record(z.string(), z.object({ active: z.boolean() }).passthrough()).default({}),
+  endpoints: z.record(z.string(), z.object({ model: modelLinkSchema.optional() }).passthrough()).default({}),
+}).passthrough();
 
 export type StudioFile = z.infer<typeof studioFileSchema>;
 
@@ -60,7 +62,7 @@ export function parseStudioFile(raw: unknown): StudioFile {
       `The studio file uses schemaVersion ${version}, but this tool only supports up to ${STUDIO_SCHEMA_VERSION}. Update the tool to open it.`,
     );
   }
-  const parsed = studioFileSchema.safeParse(raw);
+  const parsed = studioFileSchema.safeParse(version === 1 ? { ...raw, schemaVersion: 2 } : raw);
   if (!parsed.success) {
     const first = parsed.error.issues[0];
     throw invalid(`The studio file is invalid at "${first?.path.join('.') ?? ''}": ${first?.message ?? 'unknown error'}.`);

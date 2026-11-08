@@ -8,6 +8,7 @@ import {
   addRouteMutator,
   removeRouteMutator,
 } from '@mockoon/commons';
+import { randomUUID } from 'node:crypto';
 import type { ProjectDocument } from '../store/document.js';
 
 export interface RuntimeOverrides {
@@ -21,6 +22,7 @@ export interface RuntimeEnvironment {
   catchAllIds: Set<string>;
   /** Scenario names by route response uuid, for request logs. */
   scenarioNames: Map<string, string>;
+  scenarioReasons: Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random'>;
   /** Number of served routes (without the catch-alls). */
   routeCount: number;
   /** What safe mode switched off for this project; empty when templating is allowed or nothing was affected. */
@@ -70,9 +72,11 @@ function applySafeMode(source: Environment): { environment: Environment; notes: 
       response.disableTemplating = true;
       response.callbacks = [];
       headers += neutralizeHeaders(response.headers);
-      const kept = response.rules.filter((r) => !UNSAFE_RULE_TARGETS.has(r.target));
-      droppedRules += response.rules.length - kept.length;
-      response.rules = kept;
+      const unsafe = response.rules.some((r) => UNSAFE_RULE_TARGETS.has(r.target) || r.modifier.includes('{{') || r.value.includes('{{'));
+      if (unsafe) {
+        droppedRules += response.rules.length;
+        response.rules = [];
+      }
       if (response.bodyType === BodyTypes.DATABUCKET) {
         bucketBodies++;
         response.bodyType = BodyTypes.INLINE;
@@ -133,6 +137,33 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   if (overrides.port !== undefined) environment.port = overrides.port;
   if (overrides.host !== undefined) environment.hostname = overrides.host;
 
+  const scenarioReasons = new Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random'>();
+  for (const route of environment.routes) {
+    const mode = route.responseMode;
+    for (const response of route.responses) scenarioReasons.set(response.uuid, mode === 'DISABLE_RULES' ? 'fixed' : mode === 'SEQUENTIAL' ? 'sequential' : mode === 'RANDOM' ? 'random' : response.rules.length ? 'rule' : 'default');
+    if (!document.studio.settings.scenarioOverrideHeader) continue;
+    // The engine bypasses all rules in sequential and random modes. Keep their native
+    // selection intact; forced headers are unavailable in these two modes.
+    if (mode === 'SEQUENTIAL' || mode === 'RANDOM' || (mode !== null && mode !== 'DISABLE_RULES')) {
+      safeModeNotes.push(`Scenario override header is unavailable for ${mode} mode on ${route.endpoint}`);
+      continue;
+    }
+    const copies = route.responses.flatMap((response, index) => [response.label || (index === 0 ? 'Default' : `Response ${index + 1}`), response.uuid].filter((value) => !value.includes('{{')).map((value) => {
+      const copy = structuredClone(response);
+      copy.uuid = randomUUID();
+      copy.default = false;
+      copy.rulesOperator = 'AND';
+      copy.rules = [{ target: 'header', modifier: 'X-Mock-Scenario', operator: 'equals', value, invert: false }];
+      scenarioReasons.set(copy.uuid, 'forced');
+      return copy;
+    }));
+    if (mode === 'DISABLE_RULES') {
+      for (const response of route.responses) response.rules = [];
+      route.responseMode = null;
+    }
+    route.responses = [...copies, ...route.responses];
+  }
+
   const routeCount = environment.routes.length;
   const catchAllIds = new Set<string>();
   if (!environment.proxyMode && environment.endpointPrefix === '') {
@@ -147,5 +178,5 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   for (const route of environment.routes) {
     for (const response of route.responses) scenarioNames.set(response.uuid, response.label);
   }
-  return { environment, catchAllIds, scenarioNames, routeCount, safeModeNotes };
+  return { environment, catchAllIds, scenarioNames, scenarioReasons, routeCount, safeModeNotes };
 }

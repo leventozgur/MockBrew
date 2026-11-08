@@ -230,6 +230,28 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
     return done();
   });
 
+  app.put('/api/endpoints/:id/scenarios/:sid/rules', async (request) => {
+    const { id, sid } = request.params as { id: string; sid: string };
+    const body = asObject(request.body);
+    await service.setScenarioRules(id, sid, body.rules, body.rulesOperator);
+    return done();
+  });
+
+  app.patch('/api/endpoints/:id/response-mode', async (request) => {
+    await service.setEndpointMode((request.params as { id: string }).id, asObject(request.body).responseMode);
+    return done();
+  });
+
+  app.put('/api/endpoints/:id/scenario-order', async (request) => {
+    await service.reorderScenarios((request.params as { id: string }).id, asObject(request.body).scenarioIds);
+    return done();
+  });
+
+  app.post('/api/runtime/reset-counters', async () => {
+    await service.resetRequestCounters();
+    return done();
+  });
+
   app.put('/api/endpoints/:id/active-scenario', async (request) => {
     const body = asObject(request.body);
     await service.setActiveScenario((request.params as { id: string }).id, str(body.scenarioId, 'scenarioId'));

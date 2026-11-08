@@ -122,3 +122,25 @@ export function validateProxyHost(value: unknown): string {
   if (url.search || url.hash) throw invalid('The backend address must not contain a query or fragment.');
   return url.origin + (url.pathname === '/' ? '' : url.pathname.replace(/\/$/, ''));
 }
+
+/** Validate an entire replacement before changing the document. */
+export function validateRules(value: unknown, operator: unknown): { rules: import('./model.js').ScenarioRule[]; rulesOperator: 'AND' | 'OR' } {
+  if (!Array.isArray(value) || value.length > 20) throw invalid('Rules must be a list of at most 20 items.');
+  if (operator !== 'AND' && operator !== 'OR') throw invalid('Rules operator must be AND or OR.');
+  const targets = ['header', 'query', 'params', 'body', 'cookie', 'request_number', 'method'];
+  const operators = ['equals', 'regex', 'regex_i', 'null', 'empty_array', 'array_includes'];
+  const rules = value.map((item: unknown) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw invalid('Invalid rule.');
+    const r = item as Record<string, unknown>;
+    if (typeof r.target !== 'string' || !targets.includes(r.target) || typeof r.operator !== 'string' || !operators.includes(r.operator)) throw invalid('Unsupported rule target or operator.');
+    if (typeof r.modifier !== 'string' || r.modifier.length > 1024 || (['header', 'query', 'params', 'body', 'cookie'].includes(r.target) && !r.modifier.trim())) throw invalid('A valid rule modifier is required.');
+    if (typeof r.value !== 'string' || r.value.length > 4096 || typeof r.invert !== 'boolean') throw invalid('Invalid rule value or invert flag.');
+    if (r.modifier.includes('{{') || r.value.includes('{{')) throw invalid('Template expressions are not allowed in rules.');
+    if (r.operator === 'regex' || r.operator === 'regex_i') {
+      if (r.value.length > 512) throw invalid('Regular expression is too long.');
+      try { new RegExp(r.value, r.operator === 'regex_i' ? 'i' : undefined); } catch { throw invalid('Invalid regular expression.'); }
+    } else if (r.target === 'request_number' && (r.operator !== 'equals' || !/^[1-9][0-9]*$/.test(r.value))) throw invalid('Request number must be a positive integer or regular expression.');
+    return { target: r.target, modifier: r.modifier, value: r.value, operator: r.operator, invert: r.invert } as import('./model.js').ScenarioRule;
+  });
+  return { rules, rulesOperator: operator };
+}

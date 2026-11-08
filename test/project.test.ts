@@ -59,7 +59,7 @@ describe('project files', () => {
       expect(text).not.toContain(dir);
       expect(text).not.toContain(os.userInfo().username);
     }
-    expect(JSON.parse(studioText)).toMatchObject({ schemaVersion: 1, environmentFile: 'orders-api.environment.json' });
+    expect(JSON.parse(studioText)).toMatchObject({ schemaVersion: 2, environmentFile: 'orders-api.environment.json' });
 
     const reopened = await ProjectService.open(dir);
     open.push(reopened);
@@ -403,4 +403,85 @@ describe('Mockoon CLI compatibility', () => {
     expect(response?.status).toBe(200);
     expect(await response?.json()).toEqual({ id: 7 });
   }, 30000);
+});
+
+describe('conditional responses', () => {
+  it('selects rules, overrides by name and id, validates atomically and resets sequential counters', async () => {
+    const service = await newProject();
+    const c = await service.createCollection('Rules');
+    const id = await service.createEndpoint(c, { method: 'POST', path: '/items/:id', scenarios: [{ name: 'Default', body: '{"case":"default"}' }, { name: 'Special', statusCode: 401, body: '{"case":"special"}' }] });
+    const [fallback, special] = service.findEndpoint(id).scenarios;
+    const rule = (target: string, modifier: string, value: string, operator = 'equals', invert = false) => ({ target, modifier, value, operator, invert });
+    await service.setScenarioRules(id, special!.id, [rule('header', 'Authorization', '', 'null')], 'AND');
+    await service.start();
+    expect((await get(service, '/items/1', { method: 'POST' })).status).toBe(401);
+    expect((await get(service, '/items/1', { method: 'POST', headers: { Authorization: 'ok' } })).status).toBe(200);
+    expect((await get(service, '/items/1', { method: 'POST', headers: { 'x-mock-scenario': 'Special', Authorization: 'ok' } })).status).toBe(401);
+    expect((await get(service, '/items/1', { method: 'POST', headers: { 'X-MOCK-SCENARIO': special!.id, Authorization: 'ok' } })).status).toBe(401);
+    expect(service.runtime.logs().at(-1)).toMatchObject({ scenario: 'Special', scenarioReason: 'forced' });
+    await service.updateSettings({ scenarioOverrideHeader: false });
+    expect((await get(service, '/items/1', { method: 'POST', headers: { 'x-mock-scenario': 'Special', Authorization: 'ok' } })).status).toBe(200);
+    for (const [target, modifier, value, url, headers, body] of [
+      ['query', 'page', '99', '/items/1?page=99', {}, undefined],
+      ['params', 'id', '42', '/items/42', {}, undefined],
+      ['body', '$.type', 'premium', '/items/1', { 'Content-Type': 'application/json' }, '{"type":"premium"}'],
+      ['cookie', 'tier', 'gold', '/items/1', { Cookie: 'tier=gold' }, undefined],
+    ] as const) {
+      await service.setScenarioRules(id, special!.id, [rule(target, modifier, value)], 'AND');
+      expect((await get(service, url, { method: 'POST', headers, body })).status).toBe(401);
+    }
+    await service.setScenarioRules(id, special!.id, [rule('query', 'a', '1'), rule('query', 'b', '2', 'equals', true)], 'AND');
+    expect((await get(service, '/items/1?a=1&b=3', { method: 'POST' })).status).toBe(401);
+    expect((await get(service, '/items/1?a=1&b=2', { method: 'POST' })).status).toBe(200);
+    await service.setScenarioRules(id, special!.id, [rule('query', 'a', '1'), rule('query', 'b', '2')], 'OR');
+    expect((await get(service, '/items/1?b=2', { method: 'POST', headers: { Connection: 'close' } })).status).toBe(401);
+    const before = await fs.readFile(path.join(dir, 'orders-api.environment.json'), 'utf8');
+    await expect(service.setScenarioRules(id, special!.id, [rule('query', 'a', '[', 'regex')], 'AND')).rejects.toThrow(/regular expression/i);
+    expect(await fs.readFile(path.join(dir, 'orders-api.environment.json'), 'utf8')).toBe(before);
+    await service.reorderScenarios(id, [special!.id, fallback!.id]);
+    await service.setEndpointMode(id, 'sequential');
+    await service.updateSettings({ scenarioOverrideHeader: true });
+    expect(service.view().safeModeNotes.some((note) => note.includes('unavailable for SEQUENTIAL'))).toBe(true);
+    await service.resetRequestCounters();
+    expect((await get(service, '/items/1', { method: 'POST', headers: { Connection: 'close', 'X-Mock-Scenario': 'Default' } })).status).toBe(401);
+    expect((await get(service, '/items/1', { method: 'POST', headers: { Connection: 'close' } })).status).toBe(200);
+    await service.resetRequestCounters();
+    expect((await get(service, '/items/1', { method: 'POST' })).status).toBe(401);
+  });
+
+  it('preserves imported unsafe rules and disables them in safe mode', async () => {
+    const service = await newProject();
+    const c = await service.createCollection('Imported');
+    const id = await service.createEndpoint(c, { method: 'GET', path: '/unsafe', scenarios: [{ name: 'Default', body: '{}' }, { name: 'Unsafe', statusCode: 500, body: '{}' }] });
+    const scenarioId = service.findEndpoint(id).scenarios[1]!.id;
+    const file = path.join(dir, 'orders-api.environment.json');
+    const env = JSON.parse(await fs.readFile(file, 'utf8'));
+    env.routes[0].responses[1].rules = [{ target: 'templating', modifier: '{{hostname}}', value: '', operator: 'null', invert: true }];
+    await fs.writeFile(file, JSON.stringify(env));
+    await service.reloadFromDisk();
+    expect(service.findEndpoint(id).scenarios[1]!.rules[0]!.target).toBe('templating');
+    await expect(service.setScenarioRules(id, scenarioId, [], 'AND')).rejects.toThrow(/read-only/);
+    await service.start();
+    expect((await get(service, '/unsafe')).status).toBe(200);
+    await service.createCollection('Another');
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).routes[0].responses[1].rules[0].target).toBe('templating');
+  });
+
+  it('migrates a v1 sidecar in memory and saves v2 on the next change', async () => {
+    const service = await newProject();
+    await service.close();
+    const file = path.join(dir, 'orders-api.studio.json');
+    const v1 = JSON.parse(await fs.readFile(file, 'utf8'));
+    v1.schemaVersion = 1;
+    delete v1.settings.scenarioOverrideHeader;
+    v1.extra = { retained: true };
+    await fs.writeFile(file, JSON.stringify(v1));
+    const migrated = await ProjectService.open(dir);
+    open.push(migrated);
+    expect(migrated.view().migrated).toBe(true);
+    expect(migrated.model().settings.scenarioOverrideHeader).toBe(true);
+    expect(JSON.parse(await fs.readFile(file, 'utf8')).schemaVersion).toBe(1);
+    await migrated.createCollection('After migration');
+    expect(JSON.parse(await fs.readFile(file, 'utf8'))).toMatchObject({ schemaVersion: 2, extra: { retained: true } });
+  });
 });

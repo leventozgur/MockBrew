@@ -13,6 +13,15 @@ export interface Header {
   value: string;
 }
 
+export interface ScenarioRule {
+  target: 'header' | 'query' | 'params' | 'body' | 'cookie' | 'request_number' | 'method';
+  modifier: string;
+  value: string;
+  operator: 'equals' | 'regex' | 'regex_i' | 'null' | 'empty_array' | 'array_includes';
+  invert: boolean;
+}
+export type ResponseMode = 'rules' | 'fixed' | 'sequential' | 'random';
+
 export interface Scenario {
   id: string;
   name: string;
@@ -21,6 +30,9 @@ export interface Scenario {
   body: string;
   latencyMs: number;
   active: boolean;
+  /** Imported unsupported rules are preserved but cannot be created here. */
+  rules: { target: string; modifier: string; value: string; operator: string; invert: boolean }[];
+  rulesOperator: 'AND' | 'OR';
 }
 
 export interface ModelLink {
@@ -38,6 +50,7 @@ export interface Endpoint {
   path: string;
   description: string;
   scenarios: Scenario[];
+  responseMode: ResponseMode | 'other';
   model?: ModelLink;
   /** Routes created outside this tool (CRUD, WebSocket, unusual methods) are shown but not editable. */
   readOnly: boolean;
@@ -65,6 +78,7 @@ export interface ProjectSettings {
   proxy: { enabled: boolean; host: string };
   /** Off by default: imported Mockoon files must not run templating helpers, callbacks or data buckets. */
   allowTemplating: boolean;
+  scenarioOverrideHeader: boolean;
 }
 
 export interface ProjectModel {
@@ -112,4 +126,5 @@ export interface SettingsPatch {
   logBodies?: boolean;
   proxy?: { enabled?: boolean; host?: string };
   allowTemplating?: boolean;
+  scenarioOverrideHeader?: boolean;
 }

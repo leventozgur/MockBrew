@@ -308,6 +308,22 @@ export class ProjectService extends EventEmitter {
     return this.mutate((doc) => doc.setActiveScenario(endpointId, scenarioId));
   }
 
+  setScenarioRules(endpointId: string, scenarioId: string, rules: unknown, operator: unknown): Promise<void> {
+    return this.mutate((doc) => doc.setScenarioRules(endpointId, scenarioId, rules, operator));
+  }
+
+  setEndpointMode(endpointId: string, mode: unknown): Promise<void> {
+    return this.mutate((doc) => doc.setEndpointMode(endpointId, mode));
+  }
+
+  reorderScenarios(endpointId: string, ids: unknown): Promise<void> {
+    return this.mutate((doc) => doc.reorderScenarios(endpointId, ids));
+  }
+
+  resetRequestCounters(): Promise<void> {
+    return this.enqueue(() => this.runtime.resetRequestCounters());
+  }
+
   setEndpointModel(endpointId: string, model: ModelLink | null): Promise<void> {
     const link = model === null ? null : sanitizeModelLink(model, this.root, this.location.dir);
     return this.mutate((doc) => doc.setModel(endpointId, link));

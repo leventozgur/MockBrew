@@ -48,6 +48,7 @@ import {
   validatePort,
   validateProxyHost,
   validateStatus,
+  validateRules,
   withDefaultContentType,
 } from '../core/validation.js';
 import { normalizeSettings } from '../schema/types.js';
@@ -108,14 +109,19 @@ export class ProjectDocument {
         migrated = true;
       }
     }
-    const { error } = EnvironmentSchemaNoFix.validate(environment, { abortEarly: false, allowUnknown: true });
+    // Preserve future response modes while validating the rest of the environment.
+    const validationEnvironment = structuredClone(environment);
+    for (const route of validationEnvironment.routes ?? []) {
+      if (route.responseMode !== null && !['DISABLE_RULES', 'SEQUENTIAL', 'RANDOM', 'FALLBACK'].includes(route.responseMode)) route.responseMode = null;
+    }
+    const { error } = EnvironmentSchemaNoFix.validate(validationEnvironment, { abortEarly: false, allowUnknown: true });
     if (error) {
       const details = (error.details as { message: string }[]).slice(0, 3).map((d) => d.message).join('; ');
       throw invalid(`The environment file is not a valid Mockoon environment: ${details}`);
     }
     const studio = studioRaw === undefined ? newStudioFile(environmentFile) : parseStudioFile(studioRaw);
     const document = new ProjectDocument(environment, studio);
-    document.migrated = migrated;
+    document.migrated = migrated || (typeof studioRaw === 'object' && studioRaw !== null && (studioRaw as { schemaVersion?: unknown }).schemaVersion === 1);
     return document;
   }
 
@@ -166,6 +172,8 @@ export class ProjectDocument {
       body: response.body,
       latencyMs: response.latency,
       active: response.default,
+      rules: structuredClone(response.rules),
+      rulesOperator: response.rulesOperator,
     };
   }
 
@@ -180,6 +188,7 @@ export class ProjectDocument {
       description: route.documentation,
       scenarios: route.responses.map((r, i) => this.toScenario(r, i)),
       readOnly,
+      responseMode: route.responseMode === null ? 'rules' : route.responseMode === 'DISABLE_RULES' ? 'fixed' : route.responseMode === 'SEQUENTIAL' ? 'sequential' : route.responseMode === 'RANDOM' ? 'random' : 'other',
     };
     const model = this.studio.endpoints[route.uuid]?.model;
     if (model) endpoint.model = { ...model, settings: normalizeSettings(model.settings) } as ModelLink;
@@ -224,7 +233,7 @@ export class ProjectDocument {
       }
     }
 
-    const { cors, generation, logBodies, allowTemplating } = this.studio.settings;
+    const { cors, generation, logBodies, allowTemplating, scenarioOverrideHeader } = this.studio.settings;
     return {
       name: env.name,
       collections,
@@ -236,6 +245,7 @@ export class ProjectDocument {
         logBodies,
         proxy: { enabled: env.proxyMode, host: env.proxyHost },
         allowTemplating,
+        scenarioOverrideHeader,
       },
     };
   }
@@ -427,6 +437,28 @@ export class ProjectDocument {
     this.replaceRoute({ ...route, responses: route.responses.map((r) => ({ ...r, default: r.uuid === scenarioId })) });
   }
 
+  setScenarioRules(endpointId: string, scenarioId: string, rules: unknown, operator: unknown): void {
+    const validated = validateRules(rules, operator);
+    const route = this.requireRoute(endpointId);
+    const current = route.responses.find((r) => r.uuid === scenarioId);
+    if (!current) throw notFound('Scenario', scenarioId);
+    if (current.rules.some((r) => !['header', 'query', 'params', 'body', 'cookie', 'request_number', 'method'].includes(r.target) || !['equals', 'regex', 'regex_i', 'null', 'empty_array', 'array_includes'].includes(r.operator))) throw invalid('Imported unsupported rules are read-only.');
+    this.replaceRoute({ ...route, responses: route.responses.map((r) => r.uuid === scenarioId ? { ...r, ...validated } : r) });
+  }
+
+  setEndpointMode(endpointId: string, mode: unknown): void {
+    const modes = { rules: null, fixed: 'DISABLE_RULES', sequential: 'SEQUENTIAL', random: 'RANDOM' } as const;
+    if (typeof mode !== 'string' || !Object.hasOwn(modes, mode)) throw invalid('Invalid response mode.');
+    const route = this.requireRoute(endpointId);
+    this.replaceRoute({ ...route, responseMode: modes[mode as keyof typeof modes] as Route['responseMode'] });
+  }
+
+  reorderScenarios(endpointId: string, ids: unknown): void {
+    const route = this.requireRoute(endpointId);
+    if (!Array.isArray(ids) || ids.length !== route.responses.length || new Set(ids).size !== ids.length || ids.some((id) => typeof id !== 'string' || !route.responses.some((r) => r.uuid === id))) throw invalid('Order must contain each scenario id exactly once.');
+    this.replaceRoute({ ...route, responses: ids.map((id) => route.responses.find((r) => r.uuid === id) as RouteResponse) });
+  }
+
   setModel(endpointId: string, model: ModelLink | null): void {
     this.requireRoute(endpointId);
     if (model === null) {
@@ -434,7 +466,7 @@ export class ProjectDocument {
       return;
     }
     this.studio.endpoints[endpointId] = {
-      model: { rootType: model.rootType, settings: normalizeSettings(model.settings), sources: model.sources, schema: model.schema },
+      model: { rootType: model.rootType, settings: { ...normalizeSettings(model.settings) }, sources: model.sources, schema: model.schema },
     };
   }
 
@@ -451,7 +483,7 @@ export class ProjectDocument {
       if (mode === 'reflect') headers.push({ key: 'Access-Control-Allow-Credentials', value: 'true' }, { key: 'Vary', value: 'Origin' });
     }
     this.environment = { ...this.environment, cors: enabled, headers };
-    this.studio.settings.cors = { enabled, mode };
+    this.studio.settings.cors = { ...this.studio.settings.cors, enabled, mode };
   }
 
   updateSettings(patch: SettingsPatch): void {
@@ -465,9 +497,13 @@ export class ProjectDocument {
       this.applyCors(enabled, mode);
     }
     if (patch.generation !== undefined) {
-      this.studio.settings.generation = normalizeSettings({ ...this.studio.settings.generation, ...patch.generation });
+      this.studio.settings.generation = { ...this.studio.settings.generation, ...normalizeSettings({ ...this.studio.settings.generation, ...patch.generation }) };
     }
     if (patch.logBodies !== undefined) this.studio.settings.logBodies = patch.logBodies === true;
+    if (patch.scenarioOverrideHeader !== undefined) {
+      if (typeof patch.scenarioOverrideHeader !== 'boolean') throw invalid('scenarioOverrideHeader must be a boolean.');
+      this.studio.settings.scenarioOverrideHeader = patch.scenarioOverrideHeader;
+    }
     if (patch.allowTemplating !== undefined) this.studio.settings.allowTemplating = patch.allowTemplating === true;
     if (patch.proxy !== undefined) {
       const enabled = patch.proxy.enabled ?? this.environment.proxyMode;

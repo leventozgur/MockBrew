@@ -155,6 +155,14 @@ export class MockRuntime extends EventEmitter {
     this.emit('status', this.status());
   }
 
+  async resetRequestCounters(): Promise<void> {
+    if (!this.server || !this.current) return;
+    // Engine requestNumbers belongs to the server instance; updateEnvironment does not reset it.
+    const current = this.current;
+    await this.stopServer();
+    await this.launch(current);
+  }
+
   private stopServer(): Promise<void> {
     const server = this.server;
     if (!server) return Promise.resolve();
@@ -190,6 +198,13 @@ export class MockRuntime extends EventEmitter {
     if (matched) {
       entry.endpointId = transaction.routeUUID;
       entry.scenario = current?.scenarioNames.get(transaction.routeResponseUUID);
+      entry.scenarioReason = current?.scenarioReasons.get(transaction.routeResponseUUID);
+      const route = current?.environment.routes.find((r) => r.uuid === transaction.routeUUID);
+      const selected = route?.responses.find((r) => r.uuid === transaction.routeResponseUUID);
+      if (entry.scenarioReason === 'rule' && selected?.default) {
+        // The transaction exposes the chosen UUID, not whether its own rules matched.
+        delete entry.scenarioReason;
+      }
     }
     if (this.logBodies) {
       entry.requestBody = stringifyBody(transaction.request.body);

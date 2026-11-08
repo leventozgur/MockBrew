@@ -28,6 +28,8 @@ export interface RequestLog {
   proxied: boolean;
   endpointId?: string;
   scenario?: string;
+  scenarioReason?: 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random';
+  matchedRules?: number[];
   requestHeaders: Header[];
   responseHeaders: Header[];
   requestBody?: string;
@@ -157,3 +159,8 @@ export interface ModelCheck {
   changes: SchemaChange[];
   violations: { scenarioId: string; scenario: string; errors: ValidationIssue[] }[];
 }
+
+/** Request bodies for the conditional response control API. */
+export interface ScenarioRulesRequest { rules: import('./model.js').ScenarioRule[]; rulesOperator: 'AND' | 'OR' }
+export interface EndpointModeRequest { responseMode: import('./model.js').ResponseMode }
+export interface ScenarioOrderRequest { scenarioIds: string[] }

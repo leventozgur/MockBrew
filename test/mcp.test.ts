@@ -42,7 +42,7 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'reorder_scenarios', 'reset_request_counters', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
     const save = tools.find((t) => t.name === 'save_scenario');
     expect(save?.annotations?.destructiveHint).toBe(false);
@@ -74,6 +74,21 @@ describe('MCP server', () => {
     expect((await call('delete_endpoint', { endpointId, confirm: true })).json().deleted).toBe(true);
     expect((await call('delete_collection', { collectionId: secondId, confirm: true })).json().deleted).toBe(true);
     expect((await call('check_models')).json()).toEqual([]);
+  });
+
+  it('manages conditional response tools', async () => {
+    const collectionId = (await call('create_collection', { name: 'Rules' })).json().id;
+    const endpointId = (await call('create_endpoint', { collectionId, method: 'GET', path: '/rules' })).json().id;
+    const saved = (await call('save_scenario', { collection: 'Rules', method: 'GET', path: '/rules', scenarioName: 'Other', body: '{}' })).json();
+    const rules = [{ target: 'query', modifier: 'page', value: '99', operator: 'equals', invert: false }];
+    expect((await call('set_scenario_rules', { endpointId, scenarioId: saved.scenarioId, rules, rulesOperator: 'AND' })).json()).toMatchObject({ rules, rulesOperator: 'AND' });
+    const listing = (await call('list_endpoints')).json().endpoints[0];
+    expect(listing.responseMode).toBe('rules');
+    expect(listing.scenarios.find((s: { id: string }) => s.id === saved.scenarioId).rules).toEqual(rules);
+    expect((await call('reorder_scenarios', { endpointId, scenarioIds: listing.scenarios.map((s: { id: string }) => s.id).reverse() })).isError).toBe(false);
+    expect((await call('set_endpoint_mode', { endpointId, responseMode: 'sequential' })).json().responseMode).toBe('sequential');
+    expect((await call('reset_request_counters')).json().reset).toBe(true);
+    expect((await call('set_scenario_rules', { endpointId, scenarioId: saved.scenarioId, rules: [{ ...rules[0], operator: 'regex', value: '[' }], rulesOperator: 'AND' })).isError).toBe(true);
   });
 
   it('validates updated success bodies against the linked model and resulting status', async () => {
