@@ -240,7 +240,7 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 **Exit criteria:** Manually verify the flow "create an endpoint with this model, add 3 scenarios and a header condition, start the server" with a real LLM client (at least Claude Code and one other); automatically test all tools with the SDK client.
 
 **Status (2026-11-08): implemented; manual check with a real LLM client open.**
-- MCP now has 49 narrow tools (collections, endpoints, scenarios, rules and modes, profiles, server, logs, model check/update, import/export, recording), a `mockbrew://guide` resource and the prompts `mock_endpoint_from_model` and `add_error_scenarios`.
+- MCP now has 41 narrow tools (collections, endpoints, scenarios, rules and modes, profiles, server, logs, model check/update, import/export, recording), a `mockbrew://guide` resource and the prompts `mock_endpoint_from_model` and `add_error_scenarios`.
 - `mockbrew mcp install claude|codex|gemini|copilot|kiro [--scope] [--yes|--print]` runs the client's official `mcp add` command after showing it and asking (non-TTY without `--yes` refuses); Kiro gets a config snippet. Client config files are never edited directly. Tested with fake client executables only.
 - Open: register with a real client (Claude Code and one other) and run the end-to-end flow manually.
 
