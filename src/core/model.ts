@@ -33,6 +33,10 @@ export interface Scenario {
   /** Imported unsupported rules are preserved but cannot be created here. */
   rules: { target: string; modifier: string; value: string; operator: string; invert: boolean }[];
   rulesOperator: 'AND' | 'OR';
+  /** Allowlisted `{{tokens}}` in the body and header values are filled in per request. */
+  dynamic?: boolean;
+  /** File below the project folder served instead of the body. */
+  bodyFile?: string;
 }
 
 export interface ModelLink {
@@ -52,6 +56,9 @@ export interface Endpoint {
   scenarios: Scenario[];
   responseMode: ResponseMode | 'other';
   model?: ModelLink;
+  /** POST/PUT/PATCH bodies are validated against this schema before the mock answers. */
+  requestModel?: ModelLink;
+  invalidRequestScenarioId?: string;
   /** Routes created outside this tool (CRUD, WebSocket, unusual methods) are shown but not editable. */
   readOnly: boolean;
 }

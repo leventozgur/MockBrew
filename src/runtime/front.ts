@@ -2,6 +2,7 @@ import http, { type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttp
 import https from 'node:https';
 import type { Socket } from 'node:net';
 import { readFileSync } from 'node:fs';
+import { type Readable, Transform } from 'node:stream';
 
 function headerPairs(raw: string[]): [string, string][] {
   const pairs: [string, string][] = [];
@@ -13,10 +14,29 @@ export interface FrontResponse {
   status: number;
   headers?: OutgoingHttpHeaders;
   body?: string | Buffer;
+  /** Streamed instead of `body`; destroyed when the client goes away. */
+  stream?: Readable;
+}
+
+/** Observes the request body while it is forwarded unchanged. */
+export interface RequestTap {
+  chunk(data: Buffer): void;
+  end(): void;
 }
 
 export interface FrontContext {
   request: IncomingMessage;
+  /** Scratch space shared by the hooks of one request. */
+  state: Record<string, unknown>;
+  /**
+   * Reads up to `limit` bytes of the request body. The bytes are still forwarded to the engine: a body that
+   * fits is replayed from memory, a longer one is replayed followed by the unread rest of the stream.
+   */
+  readBody(limit: number): Promise<{ body: Buffer; complete: boolean }>;
+  /** Set by onRequest to watch the body while it streams to the engine. */
+  tap?: RequestTap;
+  /** Extra header fields for the request to the engine (never sent to the client). */
+  upstreamHeaders: [string, string][];
 }
 
 export interface BufferedEngineResponse {
@@ -28,6 +48,10 @@ export interface BufferedEngineResponse {
 /** Hooks are optional. Response hooks run only on content-length responses within the limit;
  * chunked, streaming and oversized responses pass through without buffering. */
 export interface FrontHooks {
+  /** Bytes the response may have to be buffered for onResponse; 0 streams it untouched. Defaults to the global limit. */
+  bufferLimit?(ctx: FrontContext, headers: IncomingHttpHeaders): number;
+  /** Called when a response wanted for buffering was passed through (too large or of unknown length). */
+  onBypass?(ctx: FrontContext, headers: IncomingHttpHeaders, reason: 'too-large' | 'unknown-length'): void;
   onRequest?(ctx: FrontContext): FrontResponse | undefined | Promise<FrontResponse | undefined>;
   onResponse?(ctx: FrontContext, response: BufferedEngineResponse): FrontResponse | undefined | Promise<FrontResponse | undefined>;
 }
@@ -39,7 +63,18 @@ export interface FrontOptions {
   tls?: { cert: string; key: string };
   hooks?: FrontHooks;
   maxBufferedResponseBytes?: number;
+  /** Response header the engine adds for the hooks; removed before anything reaches the client. */
+  privateResponseHeader?: string;
+  /** Request header only the front layer may set; copies sent by clients are removed. */
+  privateRequestHeader?: string;
   onError?: (error: Error) => void;
+}
+
+function withoutHeader(raw: string[], name: string | undefined): string[] {
+  if (!name) return raw;
+  const out: string[] = [];
+  for (let i = 0; i + 1 < raw.length; i += 2) if (raw[i]!.toLowerCase() !== name) out.push(raw[i]!, raw[i + 1]!);
+  return out;
 }
 
 export class FrontServer {
@@ -105,7 +140,7 @@ export class FrontServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const ctx = { request: req };
+    const ctx = this.createContext(req);
     if (!this.enginePort) { req.resume(); res.writeHead(503); res.end(); return; }
     try {
       const early = await this.options.hooks?.onRequest?.(ctx);
@@ -116,23 +151,47 @@ export class FrontServer {
         return;
       }
       // Forward the original header fields, including duplicates, without inventing forwarding headers.
-      const headers = req.rawHeaders;
+      const privateRequest = this.options.privateRequestHeader?.toLowerCase();
+      const headers = [...withoutHeader(req.rawHeaders, privateRequest), ...ctx.upstreamHeaders.flat()];
       const upstream = this.transport.request({ host: '127.0.0.1', port: this.enginePort, method: req.method, path: req.url, headers, agent: this.agent, ...(this.options.tls ? { rejectUnauthorized: false } : {}) });
       upstream.on('response', (response) => { void this.forwardResponse(ctx, response, res); });
       upstream.on('error', () => { if (!res.headersSent && !res.destroyed) { res.writeHead(502); res.end(); } else res.destroy(); });
       req.on('aborted', () => upstream.destroy());
       res.on('close', () => { if (!res.writableFinished) upstream.destroy(); });
+      const consumed = this.consumed.get(ctx);
+      if (consumed?.complete) {
+        ctx.tap?.chunk(consumed.prefix);
+        ctx.tap?.end();
+        if (req.rawTrailers.length) upstream.addTrailers(headerPairs(req.rawTrailers));
+        upstream.end(consumed.prefix);
+        return;
+      }
       req.on('end', () => { if (req.rawTrailers.length) upstream.addTrailers(headerPairs(req.rawTrailers)); });
-      req.pipe(upstream);
+      if (consumed) {
+        ctx.tap?.chunk(consumed.prefix);
+        upstream.write(consumed.prefix);
+      }
+      const tap = ctx.tap;
+      if (tap) {
+        const watcher = new Transform({
+          transform(chunk: Buffer, _encoding, callback) { tap.chunk(chunk); callback(null, chunk); },
+          flush(callback) { tap.end(); callback(); },
+        });
+        req.on('error', () => watcher.destroy());
+        req.pipe(watcher).pipe(upstream);
+      } else req.pipe(upstream);
     } catch {
       if (!res.headersSent && !res.destroyed) { res.writeHead(500); res.end(); } else res.destroy();
     }
   }
 
   private async forwardResponse(ctx: FrontContext, response: IncomingMessage, res: ServerResponse): Promise<void> {
+    const hooks = this.options.hooks;
+    const rawHeaders = withoutHeader(response.rawHeaders, this.options.privateResponseHeader?.toLowerCase());
     const length = response.headers['content-length'];
     const size = length !== undefined && /^\d+$/.test(length) ? Number(length) : NaN;
-    if (this.options.hooks?.onResponse && Number.isSafeInteger(size) && size <= (this.options.maxBufferedResponseBytes ?? 1024 * 1024)) {
+    const limit = hooks?.onResponse ? (hooks.bufferLimit ? hooks.bufferLimit(ctx, response.headers) : this.options.maxBufferedResponseBytes ?? 1024 * 1024) : 0;
+    if (hooks?.onResponse && limit > 0 && Number.isSafeInteger(size) && size <= limit && ctx.request.method !== 'HEAD') {
       try {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -143,22 +202,71 @@ export class FrontServer {
           chunks.push(bytes);
         }
         const body = Buffer.concat(chunks);
-        const replacement = await this.options.hooks.onResponse(ctx, { status: response.statusCode ?? 502, headers: response.headers, body });
-        if (res.destroyed) return;
+        const replacement = await hooks.onResponse(ctx, { status: response.statusCode ?? 502, headers: response.headers, body });
+        if (res.destroyed) { replacement?.stream?.destroy(); return; }
         if (replacement) { this.send(res, replacement); return; }
-        res.writeHead(response.statusCode ?? 502, response.statusMessage, response.rawHeaders);
+        res.writeHead(response.statusCode ?? 502, response.statusMessage, rawHeaders);
         res.end(body);
       } catch { res.destroy(); }
       return;
     }
-    res.writeHead(response.statusCode ?? 502, response.statusMessage, response.rawHeaders);
+    if (hooks?.onResponse && limit > 0) hooks.onBypass?.(ctx, response.headers, Number.isSafeInteger(size) ? 'too-large' : 'unknown-length');
+    res.writeHead(response.statusCode ?? 502, response.statusMessage, rawHeaders);
     response.on('error', () => res.destroy());
     response.on('end', () => { if (response.rawTrailers.length) res.addTrailers(headerPairs(response.rawTrailers)); });
     response.pipe(res);
   }
 
   private send(res: ServerResponse, response: FrontResponse): void {
-    res.writeHead(response.status, response.headers);
-    res.end(response.body);
+    const headers = { ...response.headers };
+    const hidden = this.options.privateResponseHeader?.toLowerCase();
+    if (hidden) for (const name of Object.keys(headers)) if (name.toLowerCase() === hidden) delete headers[name];
+    res.writeHead(response.status, headers);
+    const stream = response.stream;
+    if (!stream) { res.end(response.body); return; }
+    stream.on('error', () => res.destroy());
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  }
+
+  private readonly consumed = new WeakMap<FrontContext, { prefix: Buffer; complete: boolean }>();
+
+  private createContext(request: IncomingMessage): FrontContext {
+    const ctx: FrontContext = {
+      request,
+      state: {},
+      upstreamHeaders: [],
+      readBody: (limit) => this.readBody(ctx, limit),
+    };
+    return ctx;
+  }
+
+  private readBody(ctx: FrontContext, limit: number): Promise<{ body: Buffer; complete: boolean }> {
+    const previous = this.consumed.get(ctx);
+    if (previous) return Promise.resolve({ body: previous.prefix, complete: previous.complete });
+    const req = ctx.request;
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = [];
+      let total = 0;
+      const detach = () => { req.off('data', onData); req.off('end', onEnd); req.off('error', onError); req.off('close', onClose); };
+      const finish = (complete: boolean) => {
+        detach();
+        const prefix = Buffer.concat(chunks);
+        this.consumed.set(ctx, { prefix, complete });
+        resolve({ body: prefix, complete });
+      };
+      const onData = (chunk: Buffer) => {
+        chunks.push(chunk);
+        total += chunk.length;
+        if (total > limit) { req.pause(); finish(false); }
+      };
+      const onEnd = () => finish(true);
+      const onError = (error: Error) => { detach(); reject(error); };
+      const onClose = () => { if (!req.complete) onError(new Error('Request aborted')); };
+      req.on('data', onData);
+      req.on('end', onEnd);
+      req.on('error', onError);
+      req.on('close', onClose);
+    });
   }
 }

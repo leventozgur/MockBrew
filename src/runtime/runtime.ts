@@ -9,6 +9,9 @@ import { captureTransaction } from '../core/recording.js';
 import { invalid } from '../core/errors.js';
 import { maskHeaders, maskQuery } from './masking.js';
 import { FrontServer } from './front.js';
+import { type DirectLog, DynamicLayer } from './dynamic.js';
+import { REQUEST_ID_HEADER, RESPONSE_HEADER } from './environment.js';
+import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 
 export type { RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
@@ -16,6 +19,8 @@ export type { RequestLog, RuntimeState, RuntimeStatus } from '../core/view.js';
 export interface RuntimeOptions {
   /** Folder used by the engine to resolve relative file bodies. */
   environmentDirectory: string;
+  /** Folder response files must stay inside; defaults to the project folder. */
+  root?: () => string;
   maxLogs?: number;
 }
 
@@ -56,10 +61,20 @@ export class MockRuntime extends EventEmitter {
   private nextRecordingId = 1;
   private readonly recordings: Recording[] = [];
   private readonly maxLogs: number;
+  /** Secret of this run: only engine responses carrying it are trusted by the front layer. */
+  private readonly responseKey = randomUUID();
+  private dynamic: DynamicLayer;
 
   constructor(private readonly options: RuntimeOptions) {
     super();
     this.maxLogs = options.maxLogs ?? 1000;
+    this.dynamic = new DynamicLayer({
+      current: () => this.current,
+      projectDir: options.environmentDirectory,
+      root: () => options.root?.() ?? options.environmentDirectory,
+      recordDirect: (entry) => this.recordDirect(entry),
+      warn: (message) => this.emit('warning', { message }),
+    });
   }
 
   status(): RuntimeStatus {
@@ -123,7 +138,7 @@ export class MockRuntime extends EventEmitter {
 
   async start(document: ProjectDocument, overrides: RuntimeOverrides = {}): Promise<RuntimeStatus> {
     if (this.server) throw new Error('The mock server is already running.');
-    const runtimeEnv = this.withTls(buildRuntimeEnvironment(document, overrides), document);
+    const runtimeEnv = this.withTls(buildRuntimeEnvironment(document, { ...overrides, responseKey: this.responseKey }), document);
     this.logBodies = document.studio.settings.logBodies;
     await this.launch(runtimeEnv);
     return this.status();
@@ -147,7 +162,7 @@ export class MockRuntime extends EventEmitter {
     });
     try {
       const tls = environment.tlsOptions.enabled ? { cert: environment.tlsOptions.certPath, key: environment.tlsOptions.keyPath } : undefined;
-      const front = new FrontServer({ host: environment.hostname, port: environment.port, enginePort: 0, tls, onError: (error) => this.emit('server-error', { code: 'FRONT_ERROR', message: error.message }) });
+      const front = new FrontServer({ host: environment.hostname, port: environment.port, enginePort: 0, tls, hooks: this.dynamic.hooks, privateResponseHeader: RESPONSE_HEADER, privateRequestHeader: REQUEST_ID_HEADER, onError: (error) => this.emit('server-error', { code: 'FRONT_ERROR', message: error.message }) });
       this.front = front;
       // Reserve the public port first so the OS cannot assign it to the engine.
       await front.listen();
@@ -182,7 +197,7 @@ export class MockRuntime extends EventEmitter {
   /** Applies a changed project to the running server without restarting it (unless host or port changed). */
   async update(document: ProjectDocument, overrides: RuntimeOverrides = {}): Promise<void> {
     if (!this.server) return;
-    const next = this.withTls(buildRuntimeEnvironment(document, overrides), document);
+    const next = this.withTls(buildRuntimeEnvironment(document, { ...overrides, responseKey: this.responseKey }), document);
     if (!next.environment.proxyMode || !next.environment.proxyHost) this.recording = false;
     this.logBodies = document.studio.settings.logBodies;
     const { environment } = next;
@@ -229,6 +244,43 @@ export class MockRuntime extends EventEmitter {
     this.setState('stopped');
   }
 
+  /** Log entry for a request the front layer answered itself (the engine never saw it). */
+  private recordDirect(direct: DirectLog): void {
+    const current = this.current;
+    const [pathPart = '', ...queryPart] = direct.url.split('?');
+    const headers = (source: Record<string, string | string[] | undefined>) => Object.entries(source).flatMap(([key, value]) => (value === undefined ? [] : (Array.isArray(value) ? value : [value]).map((v) => ({ key, value: v }))));
+    const entry: RequestLog = {
+      id: this.nextLogId++,
+      timestamp: new Date().toISOString(),
+      method: direct.method,
+      path: pathPart,
+      query: maskQuery(queryPart.join('?')),
+      status: direct.status,
+      matched: true,
+      proxied: false,
+      endpointId: direct.routeId,
+      scenario: direct.scenario,
+      scenarioReason: 'request-invalid',
+      requestHeaders: maskHeaders(headers(direct.requestHeaders).filter((h) => h.key.toLowerCase() !== REQUEST_ID_HEADER)),
+      responseHeaders: maskHeaders(direct.responseHeaders),
+    };
+    if (current?.profileName) entry.profile = current.profileName;
+    if (direct.extras.requestValidation) entry.requestValidation = direct.extras.requestValidation;
+    if (direct.extras.multipart) entry.multipart = direct.extras.multipart;
+    entry.dynamic = { unknownTokens: [] };
+    if (this.logBodies) {
+      entry.requestBody = stringifyBody(direct.requestBody?.toString('utf8'));
+      entry.responseBody = stringifyBody(direct.responseBody);
+    }
+    this.pushEntry(entry);
+  }
+
+  private pushEntry(entry: RequestLog): void {
+    this.entries.push(entry);
+    if (this.entries.length > this.maxLogs) this.entries.splice(0, this.entries.length - this.maxLogs);
+    this.emit('log', entry);
+  }
+
   private record(transaction: Transaction): void {
     const current = this.current;
     const proxied = transaction.proxied === true;
@@ -247,9 +299,15 @@ export class MockRuntime extends EventEmitter {
       status: transaction.response.statusCode,
       matched,
       proxied,
-      requestHeaders: maskHeaders(transaction.request.headers),
-      responseHeaders: maskHeaders(transaction.response.headers),
+      requestHeaders: maskHeaders(transaction.request.headers.filter((h) => h.key.toLowerCase() !== REQUEST_ID_HEADER)),
+      responseHeaders: maskHeaders(transaction.response.headers.filter((h) => h.key.toLowerCase() !== RESPONSE_HEADER)),
     };
+    const requestId = transaction.request.headers.find((h) => h.key.toLowerCase() === REQUEST_ID_HEADER)?.value;
+    const extras = this.dynamic.take(requestId);
+    if (extras?.requestValidation) entry.requestValidation = extras.requestValidation;
+    if (extras?.multipart) entry.multipart = extras.multipart;
+    const dynamicMeta = current?.scenarioMeta.get(transaction.routeResponseUUID);
+    if (dynamicMeta?.dynamic) entry.dynamic = { unknownTokens: dynamicMeta.unknownTokens };
     if (matched) {
       entry.endpointId = transaction.routeUUID;
       entry.scenario = current?.scenarioNames.get(transaction.routeResponseUUID);
@@ -266,8 +324,6 @@ export class MockRuntime extends EventEmitter {
       entry.requestBody = stringifyBody(transaction.request.body);
       entry.responseBody = stringifyBody(transaction.response.body);
     }
-    this.entries.push(entry);
-    if (this.entries.length > this.maxLogs) this.entries.splice(0, this.entries.length - this.maxLogs);
-    this.emit('log', entry);
+    this.pushEntry(entry);
   }
 }

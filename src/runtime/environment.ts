@@ -5,16 +5,52 @@ import {
   BuildRouteResponse,
   type Environment,
   type Route,
+  type RouteResponse,
   addRouteMutator,
   removeRouteMutator,
 } from '@mockoon/commons';
 import { randomUUID } from 'node:crypto';
+import type { JsonSchema } from '../schema/types.js';
 import type { ProjectDocument } from '../store/document.js';
+import { type RouteEntry, routeEntries } from './routes.js';
+import { scenarioTokenWarnings } from './tokens.js';
+
+/** Private header the engine adds to every mock response so the front layer knows what was selected. */
+export const RESPONSE_HEADER = 'x-mockbrew-response';
+/** Private header the front layer adds to engine requests that carry log metadata. */
+export const REQUEST_ID_HEADER = 'x-mockbrew-request-id';
 
 export interface RuntimeOverrides {
   port?: number;
   host?: string;
   profileId?: string;
+  /** Secret value of this server run; only responses carrying it are trusted by the front layer. */
+  responseKey?: string;
+}
+
+export interface ScenarioMeta {
+  routeId: string;
+  name: string;
+  dynamic: boolean;
+  /** Relative to the project folder; the engine itself never reads it. */
+  bodyFile?: string;
+  unknownTokens: string[];
+}
+
+/** A scenario the front layer can answer without calling the engine. */
+export interface DirectScenario {
+  name: string;
+  status: number;
+  headers: Header[];
+  body: string;
+  latencyMs: number;
+  dynamic: boolean;
+}
+
+export interface RouteMeta {
+  requestModel?: { rootType: string; schema: JsonSchema };
+  invalid?: DirectScenario;
+  hasDynamic: boolean;
 }
 
 export interface RuntimeEnvironment {
@@ -29,6 +65,15 @@ export interface RuntimeEnvironment {
   routeCount: number;
   /** What safe mode switched off for this project; empty when templating is allowed or nothing was affected. */
   safeModeNotes: string[];
+  responseKey: string;
+  /** Front-layer data by response uuid (forced-scenario copies included). */
+  scenarioMeta: Map<string, ScenarioMeta>;
+  /** Front-layer data by route uuid, only for routes that need it. */
+  routeMeta: Map<string, RouteMeta>;
+  routes: RouteEntry[];
+  variables: Record<string, string>;
+  /** Environment-level response headers (CORS) for answers that do not pass through the engine. */
+  globalHeaders: Header[];
 }
 
 const UNSAFE_RULE_TARGETS = new Set(['templating', 'data_bucket', 'global_var']);
@@ -95,6 +140,24 @@ function applySafeMode(source: Environment): { environment: Environment; notes: 
   return { environment, notes };
 }
 
+/** The engine's own file bodies read arbitrary paths; files are served by the front layer instead. */
+function disableEngineFiles(environment: Environment): number {
+  let count = 0;
+  for (const route of environment.routes) {
+    for (const response of route.responses) {
+      if (response.bodyType !== BodyTypes.FILE) continue;
+      count++;
+      response.bodyType = BodyTypes.INLINE;
+      response.filePath = '';
+      response.sendFileAsBody = false;
+      response.statusCode = 501;
+      response.headers = [{ key: 'Content-Type', value: 'application/json; charset=utf-8' }];
+      response.body = JSON.stringify({ error: 'file_body_disabled', message: 'Engine file bodies are not served. Use the scenario file setting instead.' });
+    }
+  }
+  return count;
+}
+
 const CATCH_ALL_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head'] as const;
 const CATCH_ALL_BODY = JSON.stringify({
   error: 'no_mock_matched',
@@ -126,21 +189,28 @@ function catchAllRoute(method: (typeof CATCH_ALL_METHODS)[number]): Route {
  */
 export function buildRuntimeEnvironment(document: ProjectDocument, overrides: RuntimeOverrides = {}): RuntimeEnvironment {
   let environment = structuredClone(document.environment);
+  const responseKey = overrides.responseKey ?? '';
+  const studioScenarios = document.studio.scenarios;
+  const originals = new Map<string, RouteResponse>();
+  for (const route of environment.routes) for (const response of route.responses) originals.set(response.uuid, structuredClone(response));
   for (const collection of document.snapshot().collections) {
     if (collection.active) continue;
     for (const endpoint of collection.endpoints) environment = removeRouteMutator(environment, endpoint.id);
   }
   let safeModeNotes: string[] = [];
+  const engineFiles = disableEngineFiles(environment);
   if (!document.studio.settings.allowTemplating) {
     const safe = applySafeMode(environment);
     environment = safe.environment;
     safeModeNotes = safe.notes;
   }
+  if (engineFiles > 0) safeModeNotes.push(`${engineFiles} response(s) use engine file bodies and answer 501; use the scenario file setting`);
   if (overrides.port !== undefined) environment.port = overrides.port;
   if (overrides.host !== undefined) environment.hostname = overrides.host;
 
   const profile = document.studio.profiles[overrides.profileId ?? document.studio.activeProfileId ?? ''];
   if (profile?.network?.latencyMs) environment.latency += profile.network.latencyMs;
+  const copyOf = new Map<string, string>();
   const scenarioReasons = new Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random' | 'profile'>();
   for (const route of environment.routes) {
     const selection = profile?.endpoints[route.uuid];
@@ -166,6 +236,7 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
     const copies = route.responses.flatMap((response, index) => [response.label || (index === 0 ? 'Default' : `Response ${index + 1}`), response.uuid].filter((value) => !value.includes('{{')).map((value) => {
       const copy = structuredClone(response);
       copy.uuid = randomUUID();
+      copyOf.set(copy.uuid, response.uuid);
       copy.default = false;
       copy.rulesOperator = 'AND';
       copy.rules = [{ target: 'header', modifier: 'X-Mock-Scenario', operator: 'equals', value, invert: false }];
@@ -178,6 +249,49 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
     }
     route.responses = [...copies, ...route.responses];
   }
+
+  const scenarioMeta = new Map<string, ScenarioMeta>();
+  const routeMeta = new Map<string, RouteMeta>();
+  const hidden = new Set([RESPONSE_HEADER, REQUEST_ID_HEADER]);
+  environment.headers = environment.headers.filter((h) => !hidden.has(h.key.toLowerCase()));
+  for (const route of environment.routes) {
+    const extra = document.studio.endpoints[route.uuid];
+    const meta: RouteMeta = { hasDynamic: false };
+    for (const response of route.responses) {
+      const originalId = copyOf.get(response.uuid) ?? response.uuid;
+      const original = originals.get(originalId);
+      const settings = studioScenarios[originalId];
+      const dynamic = settings?.dynamic === true && !settings.bodyFile;
+      if (settings?.bodyFile) {
+        // The front layer streams the file; the engine only supplies status and headers.
+        response.bodyType = BodyTypes.INLINE;
+        response.body = '';
+      }
+      if (dynamic) meta.hasDynamic = true;
+      scenarioMeta.set(response.uuid, {
+        routeId: route.uuid,
+        name: response.label,
+        dynamic,
+        ...(settings?.bodyFile ? { bodyFile: settings.bodyFile } : {}),
+        unknownTokens: dynamic && original ? scenarioTokenWarnings(original.body, original.headers) : [],
+      });
+      response.headers = response.headers.filter((h) => !hidden.has(h.key.toLowerCase()));
+      response.headers.push({ key: RESPONSE_HEADER, value: `${responseKey ? `${responseKey}:` : ''}${route.uuid}:${response.uuid}` });
+    }
+    if (extra?.requestModel) {
+      meta.requestModel = { rootType: extra.requestModel.rootType, schema: extra.requestModel.schema as JsonSchema };
+      const target = extra.invalidRequestScenarioId ? originals.get(extra.invalidRequestScenarioId) : undefined;
+      if (target && route.responses.some((r) => r.uuid === target.uuid)) {
+        meta.invalid = {
+          name: target.label, status: target.statusCode, headers: target.headers.map((h) => ({ key: h.key, value: h.value })),
+          body: target.body, latencyMs: target.latency, dynamic: studioScenarios[target.uuid]?.dynamic === true,
+        };
+      }
+    }
+    if (meta.hasDynamic || meta.requestModel) routeMeta.set(route.uuid, meta);
+  }
+  const routes = routeEntries(environment);
+  const globalHeaders = environment.headers.map((h) => ({ key: h.key, value: h.value.replace(/\\\{\{/g, '{{') }));
 
   const routeCount = environment.routes.length;
   const catchAllIds = new Set<string>();
@@ -194,5 +308,8 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   for (const route of environment.routes) {
     for (const response of route.responses) scenarioNames.set(response.uuid, response.label);
   }
-  return { environment, catchAllIds, scenarioNames, scenarioReasons, routeCount, safeModeNotes, profileName: profile?.name };
+  return {
+    environment, catchAllIds, scenarioNames, scenarioReasons, routeCount, safeModeNotes, profileName: profile?.name,
+    responseKey, scenarioMeta, routeMeta, routes, variables: structuredClone(document.studio.variables), globalHeaders,
+  };
 }

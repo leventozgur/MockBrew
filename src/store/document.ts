@@ -55,6 +55,8 @@ import { normalizeSettings } from '../schema/types.js';
 import type { Bundle } from '../core/import/bundle.js';
 import { type StudioFile, newStudioFile, parseStudioFile } from './studio-file.js';
 
+const INVALID_REQUEST_SCENARIO = 'Invalid request (422)';
+const INVALID_REQUEST_BODY = '{"errors": {{json validation.errors}}}';
 const CORS_METHODS = 'GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS';
 const CORS_HEADERS = 'Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With';
 const CORS_KEYS = new Set(CORSHeaders.map((h) => h.key.toLowerCase()).concat(['access-control-allow-credentials', 'vary']));
@@ -165,7 +167,10 @@ export class ProjectDocument {
   }
 
   private toScenario(response: RouteResponse, index: number): Scenario {
+    const extra = this.studio.scenarios[response.uuid];
     return {
+      ...(extra?.dynamic ? { dynamic: true } : {}),
+      ...(extra?.bodyFile ? { bodyFile: extra.bodyFile } : {}),
       id: response.uuid,
       name: response.label || (index === 0 ? 'Default' : `Response ${index + 1}`),
       statusCode: response.statusCode,
@@ -191,8 +196,10 @@ export class ProjectDocument {
       readOnly,
       responseMode: route.responseMode === null ? 'rules' : route.responseMode === 'DISABLE_RULES' ? 'fixed' : route.responseMode === 'SEQUENTIAL' ? 'sequential' : route.responseMode === 'RANDOM' ? 'random' : 'other',
     };
-    const model = this.studio.endpoints[route.uuid]?.model;
-    if (model) endpoint.model = { ...model, settings: normalizeSettings(model.settings) } as ModelLink;
+    const extra = this.studio.endpoints[route.uuid];
+    if (extra?.model) endpoint.model = { ...extra.model, settings: normalizeSettings(extra.model.settings) } as ModelLink;
+    if (extra?.requestModel) endpoint.requestModel = { ...extra.requestModel, settings: normalizeSettings(extra.requestModel.settings) } as ModelLink;
+    if (extra?.invalidRequestScenarioId) endpoint.invalidRequestScenarioId = extra.invalidRequestScenarioId;
     return endpoint;
   }
 
@@ -304,6 +311,7 @@ export class ProjectDocument {
     };
     collectNested(folder.uuid);
     for (const routeId of this.routeIdsIn(folder.uuid, folders)) {
+      this.forgetRoute(routeId);
       this.environment = removeRouteMutator(this.environment, routeId);
       delete this.studio.endpoints[routeId];
     }
@@ -391,8 +399,14 @@ export class ProjectDocument {
 
   removeEndpoint(endpointId: string): void {
     this.requireRoute(endpointId, false);
+    this.forgetRoute(endpointId);
     this.environment = removeRouteMutator(this.environment, endpointId);
     delete this.studio.endpoints[endpointId];
+  }
+
+  /** Drops the sidecar data of every scenario of a route that is about to be removed. */
+  private forgetRoute(routeId: string): void {
+    for (const response of this.environment.routes.find((r) => r.uuid === routeId)?.responses ?? []) delete this.studio.scenarios[response.uuid];
   }
 
   // -------------------------------------------------------------- scenarios
@@ -429,7 +443,7 @@ export class ProjectDocument {
     if (input.headers !== undefined) next.headers = withDefaultContentType(validateHeaders(input.headers));
     if (input.latencyMs !== undefined) next.latency = validateLatency(input.latencyMs);
     if (input.body !== undefined || input.headers !== undefined) {
-      next.body = validateBody(input.body === undefined ? current.body : input.body, next.headers);
+      next.body = validateBody(input.body === undefined ? current.body : input.body, next.headers, this.studio.scenarios[scenarioId]?.dynamic === true);
     }
     const responses = route.responses.map((r) => (r.uuid === scenarioId ? next : r));
     this.assertUniqueScenarioNames(responses);
@@ -441,6 +455,9 @@ export class ProjectDocument {
     const target = route.responses.find((r) => r.uuid === scenarioId);
     if (!target) throw notFound('Scenario', scenarioId);
     if (route.responses.length === 1) throw invalid('An endpoint needs at least one scenario.');
+    delete this.studio.scenarios[scenarioId];
+    const extra = this.studio.endpoints[endpointId];
+    if (extra?.invalidRequestScenarioId === scenarioId) delete extra.invalidRequestScenarioId;
     const responses = route.responses.filter((r) => r.uuid !== scenarioId);
     if (target.default) responses[0] = { ...(responses[0] as RouteResponse), default: true };
     this.replaceRoute({ ...route, responses });
@@ -476,13 +493,83 @@ export class ProjectDocument {
 
   setModel(endpointId: string, model: ModelLink | null): void {
     this.requireRoute(endpointId);
+    const { model: _previous, ...rest } = this.studio.endpoints[endpointId] ?? {};
     if (model === null) {
-      delete this.studio.endpoints[endpointId];
+      if (Object.keys(rest).length === 0) delete this.studio.endpoints[endpointId];
+      else this.studio.endpoints[endpointId] = rest;
       return;
     }
-    this.studio.endpoints[endpointId] = {
-      model: { rootType: model.rootType, settings: { ...normalizeSettings(model.settings) }, sources: model.sources, schema: model.schema },
-    };
+    this.studio.endpoints[endpointId] = { ...rest, model: this.linkOf(model) };
+  }
+
+  private linkOf(model: ModelLink): NonNullable<StudioFile['endpoints'][string]['model']> {
+    return { rootType: model.rootType, settings: { ...normalizeSettings(model.settings) }, sources: model.sources, schema: model.schema };
+  }
+
+  setScenarioDynamic(endpointId: string, scenarioId: string, dynamic: boolean): void {
+    if (typeof dynamic !== 'boolean') throw invalid('"dynamic" must be a boolean.');
+    const route = this.requireRoute(endpointId);
+    if (!route.responses.some((r) => r.uuid === scenarioId)) throw notFound('Scenario', scenarioId);
+    this.updateScenarioExtra(scenarioId, { dynamic: dynamic ? true : undefined });
+  }
+
+  private updateScenarioExtra(scenarioId: string, patch: { dynamic?: boolean | undefined; bodyFile?: string | undefined }): void {
+    const next = { ...(this.studio.scenarios[scenarioId] ?? {}), ...patch } as { dynamic?: boolean; bodyFile?: string };
+    if (!next.dynamic) delete next.dynamic;
+    if (!next.bodyFile) delete next.bodyFile;
+    if (Object.keys(next).length === 0) delete this.studio.scenarios[scenarioId];
+    else this.studio.scenarios[scenarioId] = next;
+  }
+
+  /** Serves a project file instead of the inline body (null goes back to the inline body). The caller validates the file. */
+  setScenarioFile(endpointId: string, scenarioId: string, file: string | null, contentType?: string): void {
+    const route = this.requireRoute(endpointId);
+    const current = route.responses.find((r) => r.uuid === scenarioId);
+    if (!current) throw notFound('Scenario', scenarioId);
+    this.updateScenarioExtra(scenarioId, { bodyFile: file ?? undefined });
+    if (file !== null && contentType) {
+      const headers = current.headers.filter((h) => h.key.toLowerCase() !== 'content-type');
+      this.replaceRoute({ ...route, responses: route.responses.map((r) => (r.uuid === scenarioId ? { ...r, headers: [{ key: 'Content-Type', value: contentType }, ...headers] } : r)) });
+    }
+  }
+
+  /**
+   * Links a request schema to an endpoint. Requests that do not match are answered with the invalid-request
+   * scenario, which is created (422, dynamic) unless an existing scenario of the endpoint is named.
+   */
+  setRequestModel(endpointId: string, model: ModelLink | null, invalidScenarioId?: string): void {
+    const route = this.requireRoute(endpointId);
+    const existing = this.studio.endpoints[endpointId] ?? {};
+    if (model === null) {
+      const { requestModel: _a, invalidRequestScenarioId: _b, ...rest } = existing;
+      if (Object.keys(rest).length === 0) delete this.studio.endpoints[endpointId];
+      else this.studio.endpoints[endpointId] = rest;
+      return;
+    }
+    if (!['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase())) throw invalid('A request model applies to POST, PUT and PATCH endpoints.');
+    let scenarioId = invalidScenarioId ?? existing.invalidRequestScenarioId;
+    if (scenarioId !== undefined && !route.responses.some((r) => r.uuid === scenarioId)) {
+      if (invalidScenarioId !== undefined) throw notFound('Scenario', invalidScenarioId);
+      scenarioId = undefined;
+    }
+    if (scenarioId === undefined) {
+      const byName = route.responses.find((r) => r.label.toLowerCase() === INVALID_REQUEST_SCENARIO.toLowerCase());
+      if (byName) scenarioId = byName.uuid;
+      else {
+        const response = BuildRouteResponse();
+        response.label = INVALID_REQUEST_SCENARIO;
+        response.statusCode = 422;
+        response.headers = withDefaultContentType([]);
+        response.body = INVALID_REQUEST_BODY;
+        response.bodyType = BodyTypes.INLINE;
+        response.disableTemplating = true;
+        response.default = false;
+        this.replaceRoute({ ...route, responses: [...route.responses, response] });
+        this.updateScenarioExtra(response.uuid, { dynamic: true });
+        scenarioId = response.uuid;
+      }
+    }
+    this.studio.endpoints[endpointId] = { ...existing, requestModel: this.linkOf(model), invalidRequestScenarioId: scenarioId };
   }
 
   // --------------------------------------------------------------- settings

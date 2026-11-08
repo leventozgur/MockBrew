@@ -311,6 +311,39 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
     return done();
   });
 
+  app.put('/api/endpoints/:id/scenarios/:sid/dynamic', async (request) => {
+    const { id, sid } = request.params as { id: string; sid: string };
+    const body = asObject(request.body);
+    if (typeof body.dynamic !== 'boolean') throw invalid('"dynamic" must be a boolean.');
+    await service.setScenarioDynamic(id, sid, body.dynamic);
+    return done();
+  });
+
+  app.put('/api/endpoints/:id/scenarios/:sid/file', async (request) => {
+    const { id, sid } = request.params as { id: string; sid: string };
+    const body = asObject(request.body);
+    if (body.file !== null && typeof body.file !== 'string') throw invalid('"file" must be a path relative to the project folder, or null.');
+    await service.setScenarioFile(id, sid, body.file);
+    return done();
+  });
+
+  app.put('/api/endpoints/:id/request-model', async (request) => {
+    const body = asObject(request.body);
+    if (body.invalidRequestScenarioId !== undefined) str(body.invalidRequestScenarioId, 'invalidRequestScenarioId');
+    await service.setRequestModel((request.params as { id: string }).id, body.model === null ? null : (asObject(body.model) as unknown as ModelLink), body.invalidRequestScenarioId as string | undefined);
+    return done();
+  });
+
+  app.delete('/api/endpoints/:id/request-model', async (request) => {
+    await service.setRequestModel((request.params as { id: string }).id, null);
+    return done();
+  });
+
+  app.get('/api/tokens/validate', async (request) => {
+    const query = request.query as { endpointId?: string; scenarioId?: string };
+    return service.validateTokens(query.endpointId, query.scenarioId);
+  });
+
   app.patch('/api/settings', async (request) => {
     await service.updateSettings(asObject(request.body));
     return done();

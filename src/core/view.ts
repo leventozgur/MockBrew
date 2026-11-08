@@ -35,6 +35,34 @@ export interface RequestLog {
   responseHeaders: Header[];
   requestBody?: string;
   responseBody?: string;
+  /** Present when the scenario fills in tokens; unknown tokens are served as written. */
+  dynamic?: { unknownTokens: string[]; skipped?: string };
+  /** Present when the endpoint has a request model and the body was checked. */
+  requestValidation?: { model: string; valid: boolean; errors?: ValidationIssue[] };
+  /** Metadata of a multipart upload; contents are never logged. */
+  multipart?: MultipartLog;
+}
+
+export interface MultipartPartLog {
+  name?: string;
+  fileName?: string;
+  contentType?: string;
+  size: number;
+}
+
+export interface MultipartLog {
+  parts: MultipartPartLog[];
+  totalBytes: number;
+  /** Parsing stopped early (size or part limit); the request itself was forwarded in full. */
+  truncated?: boolean;
+}
+
+export interface TokenReport {
+  endpointId: string;
+  scenarioId: string;
+  scenario: string;
+  dynamic: boolean;
+  unknownTokens: string[];
 }
 
 export interface ProjectView {

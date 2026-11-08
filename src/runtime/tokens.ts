@@ -110,3 +110,8 @@ export function expandTokens(input: string, context: TokenContext, json = false)
   }
   return result;
 }
+
+/** Unknown tokens in a scenario body and its header values. */
+export function scenarioTokenWarnings(body: string, headers: { value: string }[]): string[] {
+  return [...new Set([body, ...headers.map((h) => h.value)].flatMap((value) => (value.includes('{{') ? validateTokens(value) : [])))];
+}

@@ -81,10 +81,11 @@ function isJsonContentType(headers: Header[]): boolean {
 }
 
 /** A JSON response must carry parseable JSON; empty bodies (e.g. 204) are allowed. */
-export function validateBody(value: unknown, headers: Header[]): string {
+export function validateBody(value: unknown, headers: Header[], allowTokens = false): string {
   if (typeof value !== 'string') throw invalid('Body must be a string.');
   if (Buffer.byteLength(value) > MAX_BODY_BYTES) throw invalid('Body is too large.');
-  if (value.trim() !== '' && isJsonContentType(headers)) {
+  // Dynamic bodies may hold `{{json ...}}` tokens that only become JSON after substitution.
+  if (!allowTokens && value.trim() !== '' && isJsonContentType(headers)) {
     try {
       JSON.parse(value);
     } catch (error) {

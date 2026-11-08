@@ -37,10 +37,11 @@ import type {
   SettingsPatch,
 } from './model.js';
 import { ModelService, stripSourceInfo } from './model-service.js';
-import { isInside } from './safe-path.js';
+import { isInside, resolveResponseFile } from './safe-path.js';
+import { scenarioTokenWarnings } from '../runtime/tokens.js';
 import { diffSchemas } from './schema-diff.js';
 import { updateModelBody } from './model-update.js';
-import type { ModelCheck, ModelUpdatePreview, ModelUpdateSelection, ProjectView, RuntimeStatus } from './view.js';
+import type { ModelCheck, ModelUpdatePreview, ModelUpdateSelection, ProjectView, RuntimeStatus, TokenReport } from './view.js';
 import { normalizeSettings } from '../schema/types.js';
 import { exportBundle, parseBundle } from './import/bundle.js';
 
@@ -117,7 +118,7 @@ export class ProjectService extends EventEmitter {
     this.root = path.resolve(options.root ?? location.dir);
     this.overrides = options.overrides ?? {};
     this.models = new ModelService(this.root);
-    this.runtime = new MockRuntime({ environmentDirectory: location.dir });
+    this.runtime = new MockRuntime({ environmentDirectory: location.dir, root: () => this.root });
     this.runtime.on('status', () => this.emit('runtime'));
     this.runtime.on('log', (entry) => this.emit('log', entry));
     if (options.watch) this.watcher = watchProject(location, () => void this.reloadFromDisk());
@@ -278,7 +279,7 @@ export class ProjectService extends EventEmitter {
       for (const endpoint of collection.endpoints) {
         if (!endpoint.model) continue;
         for (const scenario of endpoint.scenarios) {
-          if (scenario.body.trim() === '' || !isModelBound(scenario.statusCode)) continue;
+          if (scenario.body.trim() === '' || scenario.dynamic || !isModelBound(scenario.statusCode)) continue;
           const result = validateAgainstSchema(endpoint.model.schema, scenario.body);
           if (!result.valid) violations[scenario.id] = result.errors.slice(0, 20);
         }
@@ -487,7 +488,7 @@ export class ProjectService extends EventEmitter {
       doc.updateScenario(endpointId, scenarioId, input);
       const endpoint = doc.snapshot().collections.flatMap((c) => c.endpoints).find((e) => e.id === endpointId);
       const scenario = endpoint?.scenarios.find((s) => s.id === scenarioId);
-      if (endpoint?.model && scenario && isModelBound(scenario.statusCode)) {
+      if (endpoint?.model && scenario && !scenario.dynamic && isModelBound(scenario.statusCode)) {
         const result = validateAgainstSchema(endpoint.model.schema, scenario.body);
         if (!result.valid) throw invalid(`The body does not match ${endpoint.model.rootType}: ${result.errors.slice(0, 5).map((e) => `${e.path} ${e.message}`).join('; ')}`, result.errors);
       }
@@ -516,6 +517,40 @@ export class ProjectService extends EventEmitter {
 
   resetRequestCounters(): Promise<void> {
     return this.enqueue(() => this.runtime.resetRequestCounters());
+  }
+
+  setScenarioDynamic(endpointId: string, scenarioId: string, dynamic: boolean): Promise<void> {
+    return this.mutate((doc) => doc.setScenarioDynamic(endpointId, scenarioId, dynamic));
+  }
+
+  /** Links (or unlinks, with null) the schema POST/PUT/PATCH bodies are checked against. */
+  setRequestModel(endpointId: string, model: ModelLink | null, invalidScenarioId?: string): Promise<void> {
+    const link = model === null ? null : sanitizeModelLink(model, this.root, this.location.dir);
+    return this.mutate((doc) => doc.setRequestModel(endpointId, link, invalidScenarioId));
+  }
+
+  /** Serves a file below the project folder (inside the access root, no symbolic links, at most 50 MB) as the body. */
+  async setScenarioFile(endpointId: string, scenarioId: string, file: string | null): Promise<void> {
+    const resolved = file === null ? undefined : await resolveResponseFile(this.location.dir, this.root, file);
+    const stored = file === null ? null : file.replace(/\\/g, '/').replace(/^\.\//, '');
+    await this.mutate((doc) => doc.setScenarioFile(endpointId, scenarioId, stored, resolved?.contentType));
+  }
+
+  /** Unknown (not allowlisted) tokens per scenario, for scenarios that contain any. */
+  validateTokens(endpointId?: string, scenarioId?: string): TokenReport[] {
+    if (endpointId !== undefined) this.findEndpoint(endpointId);
+    const reports: TokenReport[] = [];
+    const environment = this.document.environment;
+    for (const route of environment.routes) {
+      if (endpointId !== undefined && route.uuid !== endpointId) continue;
+      for (const response of route.responses) {
+        if (scenarioId !== undefined && response.uuid !== scenarioId) continue;
+        const unknownTokens = scenarioTokenWarnings(response.body, response.headers);
+        if (unknownTokens.length > 0) reports.push({ endpointId: route.uuid, scenarioId: response.uuid, scenario: response.label, dynamic: this.document.studio.scenarios[response.uuid]?.dynamic === true, unknownTokens });
+      }
+    }
+    if (scenarioId !== undefined && endpointId !== undefined && !this.findEndpoint(endpointId).scenarios.some((s) => s.id === scenarioId)) throw notFound('Scenario', scenarioId);
+    return reports;
   }
 
   setEndpointModel(endpointId: string, model: ModelLink | null): Promise<void> {

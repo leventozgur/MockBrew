@@ -103,6 +103,22 @@ describe('control API workflows', () => {
     expect((await call('/api/variables/base', { method: 'DELETE' })).status).toBe(200);
     expect(await (await call('/api/variables')).json()).toEqual({});
   });
+  it('manages dynamic scenarios, request models, response files and token checks', async () => {
+    const { id: collectionId } = await (await call('/api/collections', { method: 'POST', body: { name: 'Users' } })).json();
+    const { id: endpointId } = await (await call(`/api/collections/${collectionId}/endpoints`, { method: 'POST', body: { method: 'POST', path: '/users', scenarios: [{ name: 'Created', statusCode: 201, body: '{"id":"{{uuid}}","x":"{{faker.name}}"}' }] } })).json();
+    const scenarioId = service.findEndpoint(endpointId).scenarios[0]!.id;
+    const base = `/api/endpoints/${endpointId}`;
+    expect((await call(`${base}/scenarios/${scenarioId}/dynamic`, { method: 'PUT', token: null, body: { dynamic: true } })).status).toBe(401);
+    expect((await call(`${base}/scenarios/${scenarioId}/dynamic`, { method: 'PUT', body: { dynamic: 'yes' } })).status).toBe(400);
+    expect((await call(`${base}/scenarios/${scenarioId}/dynamic`, { method: 'PUT', body: { dynamic: true } })).status).toBe(200);
+    expect(await (await call('/api/tokens/validate')).json()).toEqual([expect.objectContaining({ scenarioId, dynamic: true, unknownTokens: ['{{faker.name}}'] })]);
+    expect((await call(`${base}/scenarios/${scenarioId}/file`, { method: 'PUT', body: { file: '../outside.png' } })).status).toBeGreaterThanOrEqual(400);
+    const model = { rootType: 'NewUser', settings: { naming: 'identity', dateFormat: 'iso8601' }, sources: [], schema: { type: 'object', required: ['name'] } };
+    expect((await call(`${base}/request-model`, { method: 'PUT', body: { model } })).status).toBe(200);
+    expect(service.findEndpoint(endpointId).requestModel?.rootType).toBe('NewUser');
+    expect((await call(`${base}/request-model`, { method: 'DELETE' })).status).toBe(200);
+    expect(service.findEndpoint(endpointId).requestModel).toBeUndefined();
+  });
   it('manages collections, endpoints and scenarios', async () => {
     let res = await call('/api/collections', { method: 'POST', body: { name: 'Users' } });
     const { id: collectionId } = await res.json();

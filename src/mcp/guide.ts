@@ -15,7 +15,12 @@ Use save_scenario for 401 and 500 responses and generate_sample with empty-list 
 Use save_profile to select scenarios across endpoints and activate_profile to apply it; list_profiles and deactivate_profile inspect and restore selections. Use check_models, preview_model_update, review the proposed changes, then apply_model_update with the approved preview hash and selection.
 
 ## Project variables
-Use set_variables to list, set, or delete project variables. Values are stored as plaintext; do not store secrets. Dynamic response interpolation is not yet available.
+Use set_variables to list, set, or delete project variables. Values are stored as plaintext; do not store secrets.
+
+## Dynamic values, request validation and files
+A scenario serves its body exactly as written until set_scenario_dynamic turns it on. Dynamic scenarios fill in only these tokens, in the body and in header values: {{uuid}}, {{now}}, {{now:epoch}}, {{now:epochMillis}}, {{request.params.NAME}}, {{request.query.NAME}}, {{request.header.NAME}}, {{request.body.$.path}} and {{vars.NAME}}. Inside a JSON string a token is JSON-escaped; use {{json request.body.$.item}} (outside strings) to insert a whole JSON value. Missing values become an empty string or null; anything else, such as {{faker ...}}, helpers or triple braces, is never executed and is left as written. Run validate_tokens to list unknown tokens.
+Example: POST /users with a 201 scenario whose body is {"id": "{{uuid}}", "name": "{{request.body.$.name}}", "createdAt": "{{now}}"} echoes the posted name with a new id once set_scenario_dynamic is on.
+Use set_request_model to link a request schema (from get_schema) to a POST/PUT/PATCH endpoint: a body that does not match is answered with the "Invalid request (422)" scenario ({"errors": {{json validation.errors}}}) without reaching the normal scenarios, and the request log shows the invalid fields. Use set_scenario_file to serve an image or PDF from the project folder (relative path inside the access root, at most 50 MB, no symbolic links). Multipart uploads are accepted and logged by field name, file name, content type and size only.
 
 ## Import, export and recording
 Use preview_import and review conflicts before apply_import with its hash. Export with export_bundle. With the proxy running, start_recording, inspect list_recordings, then preview_recordings and save_recordings with the reviewed hash. Recorded bodies can contain sensitive data.

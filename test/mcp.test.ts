@@ -42,7 +42,7 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'set_variables', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_import', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'export_bundle', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'list_recordings', 'parse_model', 'preview_import', 'preview_model_update', 'preview_recordings', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_recordings', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_request_model', 'set_scenario_dynamic', 'set_scenario_file', 'set_scenario_rules', 'set_variables', 'start_recording', 'start_server', 'stop_recording', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body', 'validate_tokens']);
     expect(client.getInstructions()).toContain('parse_model');
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
@@ -57,6 +57,22 @@ describe('MCP server', () => {
     expect((await call('set_variables', { operation: 'delete', name: 'base' })).json().variables).toEqual({});
     expect((await call('set_variables', { operation: 'set', values: { 'bad-name': 'x' } })).isError).toBe(true);
     expect((await call('set_variables', { operation: 'set', values: JSON.parse('{"__proto__":"value"}') })).json().variables).toEqual(JSON.parse('{"__proto__":"value"}'));
+  });
+
+  it('configures dynamic scenarios, request models and files with narrow tools', async () => {
+    const collectionId = (await call('create_collection', { name: 'Users' })).json().id;
+    const endpointId = (await call('create_endpoint', { collectionId, method: 'POST', path: '/users' })).json().id;
+    const scenarioId = (await call('list_endpoints')).json().endpoints[0].scenarios[0].id;
+    await call('update_scenario', { endpointId, scenarioId, body: '{"name":"{{request.body.$.name}}","id":"{{uuid}}","x":"{{nope}}"}' });
+    expect((await call('set_scenario_dynamic', { endpointId, scenarioId, dynamic: true })).json()).toEqual({ updated: true, unknownTokens: ['{{nope}}'] });
+    expect((await call('validate_tokens', {})).json().scenarios).toHaveLength(1);
+    const model = { rootType: 'NewUser', settings: { naming: 'identity', dateFormat: 'iso8601' }, sources: [], schema: { type: 'object', required: ['name'] } };
+    expect((await call('set_request_model', { endpointId, model })).json().requestModel).toBe('NewUser');
+    expect((await call('set_request_model', { endpointId, model: 'oops' })).isError).toBe(true);
+    expect((await call('set_scenario_file', { endpointId, scenarioId, file: '../outside.png' })).isError).toBe(true);
+    await fs.writeFile(path.join(dir, 'mocks', 'logo.png'), 'png');
+    expect((await call('set_scenario_file', { endpointId, scenarioId, file: 'logo.png' })).json().file).toBe('logo.png');
+    expect((await client.readResource({ uri: 'mockbrew://guide' })).contents[0]?.text).toContain('{{request.body.$.name}}');
   });
 
   it('lists and reads the guide and prompts over stdio', async () => {

@@ -60,7 +60,18 @@ const studioFileSchema = z.object({
   /** Plaintext configuration only; never store secrets here. */
   variables: variablesSchema.default({}),
   collections: z.record(z.string(), z.object({ active: z.boolean() }).passthrough()).default({}),
-  endpoints: z.record(z.string(), z.object({ model: modelLinkSchema.optional() }).passthrough()).default({}),
+  endpoints: z.record(z.string(), z.object({
+    model: modelLinkSchema.optional(),
+    /** Body schema checked on POST/PUT/PATCH requests; failures answer with the invalid-request scenario. */
+    requestModel: modelLinkSchema.optional(),
+    invalidRequestScenarioId: z.string().min(1).max(200).optional(),
+  }).passthrough()).default({}),
+  /** Per-scenario extras the Mockoon environment cannot hold, by response uuid. */
+  scenarios: z.record(z.string(), z.object({
+    dynamic: z.boolean().optional(),
+    /** File below the project folder, served instead of the inline body. */
+    bodyFile: z.string().min(1).max(500).optional(),
+  }).passthrough()).default({}),
 }).passthrough();
 
 export type StudioFile = z.infer<typeof studioFileSchema>;
