@@ -164,3 +164,9 @@ export interface ModelCheck {
 export interface ScenarioRulesRequest { rules: import('./model.js').ScenarioRule[]; rulesOperator: 'AND' | 'OR' }
 export interface EndpointModeRequest { responseMode: import('./model.js').ResponseMode }
 export interface ScenarioOrderRequest { scenarioIds: string[] }
+
+export interface ModelUpdateChange { kind: 'added' | 'removed' | 'regenerated' | 'kept'; path: string }
+export interface ModelUpdateScenario { scenarioId: string; scenario: string; body?: string; changes: ModelUpdateChange[]; skipped?: string }
+export interface ModelUpdateEndpoint { endpointId: string; collection: string; method: string; path: string; schema?: JsonSchema; scenarios: ModelUpdateScenario[]; unavailable?: string }
+export interface ModelUpdatePreview { hash: string; endpoints: ModelUpdateEndpoint[] }
+export interface ModelUpdateSelection { endpointId: string; scenarioIds: string[] }

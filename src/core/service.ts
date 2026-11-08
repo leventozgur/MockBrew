@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import type { RuntimeOverrides } from '../runtime/environment.js';
 import { buildRuntimeEnvironment } from '../runtime/environment.js';
@@ -33,7 +34,8 @@ import type {
 import { ModelService, stripSourceInfo } from './model-service.js';
 import { isInside } from './safe-path.js';
 import { diffSchemas } from './schema-diff.js';
-import type { ModelCheck, ProjectView, RuntimeStatus } from './view.js';
+import { updateModelBody } from './model-update.js';
+import type { ModelCheck, ModelUpdatePreview, ModelUpdateSelection, ProjectView, RuntimeStatus } from './view.js';
 import { normalizeSettings } from '../schema/types.js';
 
 export interface UpsertInput {
@@ -448,6 +450,68 @@ export class ProjectService extends EventEmitter {
       }
     }
     return results;
+  }
+
+  private modelPreviews = new Map<string, { endpointId?: string; fillOptional: boolean }>();
+
+  async previewModelUpdate(endpointId?: string, fillOptional = false): Promise<ModelUpdatePreview> {
+    const snapshot = this.document.snapshot();
+    const endpoints: ModelUpdatePreview['endpoints'] = [];
+    if (endpointId) this.findEndpoint(endpointId);
+    for (const collection of snapshot.collections) for (const endpoint of collection.endpoints) {
+      if (!endpoint.model || (endpointId && endpoint.id !== endpointId)) continue;
+      const model = endpoint.model;
+      const entry: ModelUpdatePreview['endpoints'][number] = { endpointId: endpoint.id, collection: collection.name, method: endpoint.method, path: endpoint.path, scenarios: [] };
+      try {
+        if (!model.sources.length) throw invalid('The model has no source files to re-read.');
+        const fresh = await this.models.schema({ paths: this.storedPaths(model.sources) }, model.rootType, model.settings);
+        const errors = fresh.issues.filter((issue) => issue.severity === 'error');
+        if (errors.length) throw invalid(errors.map((issue) => issue.message).join(' '));
+        entry.schema = stripSourceInfo(fresh.schema);
+        for (const scenario of endpoint.scenarios.filter((s) => isModelBound(s.statusCode))) {
+          try { JSON.parse(scenario.body); } catch {
+            entry.scenarios.push({ scenarioId: scenario.id, scenario: scenario.name, changes: [], skipped: 'Body is not JSON.' });
+            continue;
+          }
+          try {
+            const proposal = updateModelBody(model.schema, entry.schema, scenario.body, { settings: model.settings, fillOptional, seed: scenario.id });
+            entry.scenarios.push({ scenarioId: scenario.id, scenario: scenario.name, ...proposal });
+          } catch (error) {
+            entry.scenarios.push({ scenarioId: scenario.id, scenario: scenario.name, changes: [], skipped: (error as Error).message });
+          }
+        }
+      } catch (error) { entry.unavailable = (error as Error).message; }
+      endpoints.push(entry);
+    }
+    const hash = createHash('sha256').update(JSON.stringify({ snapshot, endpointId, fillOptional, endpoints })).digest('hex');
+    this.modelPreviews.set(hash, { endpointId, fillOptional });
+    if (this.modelPreviews.size > 50) this.modelPreviews.delete(this.modelPreviews.keys().next().value as string);
+    return { hash, endpoints };
+  }
+
+  async applyModelUpdate(selection: ModelUpdateSelection[], previewHash: string): Promise<void> {
+    const scope = this.modelPreviews.get(previewHash);
+    if (!scope || !Array.isArray(selection) || selection.length === 0) throw invalid('A matching model update preview and selection are required.');
+    const revision = this.revision;
+    const preview = await this.previewModelUpdate(scope.endpointId, scope.fillOptional);
+    if (preview.hash !== previewHash || this.revision !== revision) throw new StudioError('STALE', 'The model update preview is out of date. Preview again.');
+    const seen = new Set<string>();
+    for (const selected of selection) {
+      if (seen.has(selected.endpointId) || !Array.isArray(selected.scenarioIds) || new Set(selected.scenarioIds).size !== selected.scenarioIds.length) throw invalid('Invalid model update selection.');
+      seen.add(selected.endpointId);
+      const endpoint = preview.endpoints.find((e) => e.endpointId === selected.endpointId);
+      if (!endpoint?.schema || selected.scenarioIds.length === 0 || selected.scenarioIds.some((id) => !endpoint.scenarios.some((s) => s.scenarioId === id && s.body !== undefined && !s.skipped))) throw invalid('Selection contains an unavailable or unpreviewed scenario.');
+    }
+    await this.mutate((doc) => {
+      if (this.revision !== revision) throw new StudioError('STALE', 'The project changed after the preview.');
+      for (const selected of selection) {
+        const entry = preview.endpoints.find((e) => e.endpointId === selected.endpointId)!;
+        const model = this.findEndpoint(selected.endpointId).model!;
+        doc.setModel(selected.endpointId, { ...model, schema: entry.schema! });
+        for (const id of selected.scenarioIds) doc.updateScenario(selected.endpointId, id, { body: entry.scenarios.find((s) => s.scenarioId === id)!.body! });
+      }
+    });
+    this.modelPreviews.delete(previewHash);
   }
 
   /** Stores the schema of the current source files as the endpoint's model (after reviewing a check). */

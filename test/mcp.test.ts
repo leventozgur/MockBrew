@@ -42,10 +42,27 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'reorder_scenarios', 'reset_request_counters', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'preview_model_update', 'reorder_scenarios', 'reset_request_counters', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
+    expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
+    expect((await call('preview_model_update')).json().endpoints).toEqual([]);
+    expect((await call('apply_model_update', { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'invalid' })).isError).toBe(true);
     const save = tools.find((t) => t.name === 'save_scenario');
     expect(save?.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('previews and applies a model update with the approved hash', async () => {
+    await fs.writeFile(path.join(dir, 'models/Update.kt'), 'data class Update(val name: String)');
+    const saved = (await call('save_scenario', { collection: 'Updates', method: 'GET', path: '/update', scenarioName: 'Success', body: '{"name":"manual"}', paths: ['models/Update.kt'], type: 'Update' })).json();
+    await fs.writeFile(path.join(dir, 'models/Update.kt'), 'data class Update(val name: String, val email: String)');
+    const preview = (await call('preview_model_update', { endpointId: saved.endpointId })).json();
+    const proposal = preview.endpoints[0].scenarios[0];
+    expect(proposal.changes).toEqual(expect.arrayContaining([{ kind: 'added', path: '$.email' }]));
+    const selection = [{ endpointId: saved.endpointId, scenarioIds: [proposal.scenarioId] }];
+    expect((await call('apply_model_update', { selection, previewHash: 'wrong' })).isError).toBe(true);
+    expect((await call('apply_model_update', { selection, previewHash: preview.hash })).isError).toBe(false);
+    const endpoint = (await call('list_endpoints')).json().endpoints.find((e: { id: string }) => e.id === saved.endpointId);
+    expect(JSON.parse(endpoint.scenarios[0].body)).toMatchObject({ name: 'manual', email: expect.any(String) });
   });
 
   it('manages collections, endpoints and scenarios with previews, validation and conflicts', async () => {

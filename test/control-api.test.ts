@@ -56,6 +56,10 @@ describe('control API security', () => {
     expect((await call('/api/project', { token: null })).status).toBe(401);
     expect((await call('/api/project', { token: 'wrong' })).status).toBe(401);
     expect((await call('/api/project')).status).toBe(200);
+    expect((await call('/api/models/update/preview', { token: null })).status).toBe(401);
+    expect((await call('/api/models/update/apply', { method: 'POST', token: null, body: {} })).status).toBe(401);
+    expect((await call('/api/models/update/preview')).status).toBe(200);
+    expect((await call('/api/models/update/apply', { method: 'POST', body: { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'bad' } })).status).toBe(400);
   });
 
   it('rejects unexpected Host headers (DNS rebinding)', async () => {

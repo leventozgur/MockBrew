@@ -275,6 +275,21 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
 
   // ----------------------------------------------------------------- models
   app.get('/api/models/check', async () => service.checkModels());
+  app.get('/api/models/update/preview', async (request) => {
+    const query = request.query as { endpointId?: string; fillOptional?: string };
+    return service.previewModelUpdate(query.endpointId, query.fillOptional === 'true');
+  });
+  app.post('/api/models/update/apply', async (request) => {
+    const body = asObject(request.body);
+    if (!Array.isArray(body.selection)) throw invalid('"selection" must be a list.');
+    const selection = body.selection.map((item: unknown) => {
+      const entry = asObject(item);
+      if (!Array.isArray(entry.scenarioIds)) throw invalid('"scenarioIds" must be a list.');
+      return { endpointId: str(entry.endpointId, 'endpointId'), scenarioIds: entry.scenarioIds.map((id: unknown) => str(id, 'scenarioIds[]')) };
+    });
+    await service.applyModelUpdate(selection, str(body.previewHash, 'previewHash'));
+    return done();
+  });
 
   app.post('/api/endpoints/:id/model/refresh', async (request) => {
     await service.refreshModel((request.params as { id: string }).id);

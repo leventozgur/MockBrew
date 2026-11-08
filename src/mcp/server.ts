@@ -7,6 +7,7 @@ import type { ProjectService } from '../core/service.js';
 import { VARIANTS } from '../generator/index.js';
 import { validateBody } from '../schema/index.js';
 import { registerProjectTools } from './tools/project.js';
+import { registerModelTools } from './tools/models.js';
 
 const MAX_SOURCE_CHARS = 1_000_000;
 
@@ -75,6 +76,7 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
   const server = new McpServer({ name: 'mock-api-studio', version }, { instructions });
   const readOnly = { readOnlyHint: true, openWorldHint: false };
   registerProjectTools(server, service);
+  registerModelTools(server, service);
 
   server.registerTool(
     'list_collections',
