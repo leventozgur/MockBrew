@@ -305,6 +305,15 @@ Moved from the proposal pool into the plan (user approval, 2026-11-08).
 
 **Exit criteria:** Dynamic tokens work only from the allowlist; unknown tokens are left as-is with a warning; request model validation chooses the correct 2xx/4xx path; file paths cannot escape the root. Verify all with integration tests.
 
+**Status (2026-11-08): backend, control API and MCP done; dashboard UI open.**
+- Architecture change: the engine now listens on an OS-assigned 127.0.0.1 port behind our own node:http(s) front layer (`src/runtime/front.ts`), which owns the public host/port and streams traffic unchanged unless a feature applies (about 0.3 ms added per request locally). Reason: the engine exposes no pre-send hook, its header handling invokes its template parser and its FILE body type allows unrestricted paths. Engine templating stays off for all user content.
+- The engine's selected scenario reaches the front layer through a private static header keyed with a per-run secret and stripped before clients see it.
+- Opt-in `dynamic` scenarios: allowlisted tokens `{{uuid}}`, `{{now}}`, `{{now:epoch}}`, `{{now:epochMillis}}`, `{{request.params|query|header.<name>}}`, `{{request.body.<path>}}`, `{{vars.<name>}}`, string and `{{json ...}}` forms, interpreted by our own code (no eval/Handlebars). Hostile templates (`{{faker}}`, `{{#each}}`, `{{lookup}}`, triple braces, `{{setVar}}`) are served literally (tested in body and headers). Project variables in the sidecar (plaintext; no secrets).
+- Request models: invalid or unparsable POST/PUT/PATCH bodies are answered with an "Invalid request (422)" scenario listing errors; logs carry `requestValidation`.
+- Body files streamed from inside `--root` (no symlinks, `O_NOFOLLOW`, 50 MB, content type by extension). Imported engine FILE bodies are disabled with a safe-mode note. Multipart metadata (names, file names, types, sizes) logged without content.
+- MCP `set_variables`, `set_scenario_dynamic`, `set_request_model`, `set_scenario_file`, `validate_tokens`; control API routes; `test/dynamic.test.ts`, `test/front.test.ts`, `test/tokens.test.ts` (200 tests passing).
+- Open: dashboard UI; bundle import/export does not carry `dynamic`, `bodyFile` or `requestModel`; HEAD to dynamic/file scenarios returns the engine's empty answer; values in non-JSON text bodies are inserted unescaped; with `logBodies` on, the logged response body is the template; the engine port is read from its internal listener (re-check on engine upgrades).
+
 ### Milestone 15: Parser coverage: polymorphism and inheritance
 
 Deferred from M5 (user approval, 2026-11-08).
