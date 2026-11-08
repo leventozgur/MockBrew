@@ -193,11 +193,12 @@ Expose Mockoon's response rules, which already work in the file, through the dom
 
 **Exit criteria:** The same endpoint returns different status/body based on header, query, route parameter, and body conditions; the default scenario is returned when no rule matches; `X-Mock-Scenario` overrides every rule; sequential mode returns 500 on request 1 and 200 on request 2; rules apply without restart; the file behaves the same with Mockoon CLI; all are verified with integration tests.
 
-**Status (2026-11-08): M7a done, M7b (UI) open.**
+**Status (2026-11-08): M7a and M7b done.**
 - MCP gaps closed: 16 tools for collections, endpoints, scenarios, server start/stop/status, masked request logs and model check (`test/mcp.test.ts`).
 - M7a: rules, AND/OR, invert, endpoint modes, scenario ordering, `X-Mock-Scenario` (by name or id, case-insensitive header name, can be disabled), `scenarioReason` in logs, request counter reset, sidecar `schemaVersion: 2` with v1 migration, control API routes and MCP tools `set_scenario_rules`, `set_endpoint_mode`, `reorder_scenarios`, `reset_request_counters`. Verified with real HTTP integration tests (123 tests passing).
 - Known limits: `X-Mock-Scenario` is not available in sequential/random modes (the engine bypasses rules there; a runtime note is shown). `scenarioReason` is left empty when the engine cannot tell whether the default scenario matched by rule or as fallback. Resetting counters restarts the server on the same port, which may drop open connections. In safe mode a response with any unsafe rule has all its rules ignored.
-- Open: M7b dashboard rule editor, ordering and "why this response" display; manual check with the engine's desktop app.
+- M7b: dashboard response-mode selector, ordered scenario list with condition summaries, condition editor with presets and validation, reason badges in the request log, counter reset button and the `X-Mock-Scenario` setting. E2E (`npm run test:e2e`, 2 tests) covers header rule selection, fallback, forcing and log reasons; a manual browser check confirmed a preset rule is saved to the environment file.
+- Open: manual check with the engine's desktop app; the "New collection" field does not submit on Enter (minor).
 
 ### Milestone 8: Test profiles and network conditions
 
@@ -217,6 +218,11 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 - Watch source files; show a warning on the dashboard when a model changes.
 
 **Exit criteria:** For fixtures with added/deleted/type-changed/enum-changed/nullable-changed fields, the updated body is valid against the new schema and manually entered values are preserved; 4xx/5xx scenarios are untouched.
+
+**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+- `src/core/model-update.ts`: merge keeps valid manual values and raw number lexemes (64-bit safe), adds required fields with the local generator (optional fields on request), removes unknown fields, regenerates type/enum/nullability changes, keeps the body's indentation style.
+- Preview and hash-approved apply in the service, `mock-studio check --fix [--yes]`, MCP `preview_model_update` / `apply_model_update`, control API routes. Only model-bound 2xx scenarios change; non-JSON bodies are reported as skipped. `test/model-update.test.ts` plus CLI/MCP/API coverage (128 tests passing).
+- Open: dashboard notification and one-click update; source file watching for model changes.
 
 ### Milestone 10: Fully automated use through MCP
 
