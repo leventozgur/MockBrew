@@ -10,7 +10,7 @@ export function exportPostman(bundle: Bundle, name: string, mockUrl: string): un
       item: collection.endpoints.map((endpoint) => {
         const request = { method: endpoint.method, url: { raw: `{{baseUrl}}${endpoint.path}`, host: ['{{baseUrl}}'], path: endpoint.path.split('/').filter(Boolean) }, description: endpoint.description };
         return { name: `${endpoint.method} ${endpoint.path}`, request,
-          response: endpoint.scenarios.map((scenario) => ({ name: scenario.name, originalRequest: request, code: scenario.statusCode, header: scenario.headers, body: scenario.body })) };
+          response: endpoint.scenarios.map((scenario) => ({ name: scenario.name, originalRequest: request, code: scenario.statusCode, header: scenario.headers, ...(scenario.bodyFile ? {} : { body: scenario.body }), description: scenario.bodyFile ? 'Response body is served from a file in MockBrew.' : scenario.dynamic ? 'Response body is a MockBrew dynamic template.' : '' })) };
       }),
     })),
   };

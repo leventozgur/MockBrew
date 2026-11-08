@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { certificatePaths, createCertificates, deleteCertificates, showCertificates } from './certs.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync, lstatSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { RuntimeOverrides } from '../runtime/environment.js';
@@ -174,7 +174,26 @@ export class ProjectService extends EventEmitter {
     });
   }
 
-  exportBundle(collections?: string[]) { return exportBundle(this.model(), collections); }
+  exportBundle(collections?: string[]) { return { ...exportBundle(this.model(), collections), variables: this.listVariables() }; }
+
+  private importFileMissing(file: string): boolean {
+    if (!file.trim() || file.length > 500 || file.includes('\0')) throw invalid('The file path is not valid.');
+    const normalized = file.replace(/\\/g, '/');
+    if (normalized.startsWith('/') || /^[A-Za-z]:/.test(normalized)) throw invalid('Use a path relative to the project folder.');
+    const base = realpathSync(this.location.dir);
+    const root = realpathSync(this.root);
+    const candidate = path.resolve(base, normalized);
+    if (!isInside(root, candidate)) throw invalid('The file is outside the allowed folder.');
+    let current = path.parse(candidate).root;
+    for (const part of candidate.slice(current.length).split(path.sep).filter(Boolean)) {
+      current = path.join(current, part);
+      try { if (lstatSync(current).isSymbolicLink()) throw invalid('Symbolic links are not served.'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true; throw error; }
+    }
+    const info = lstatSync(candidate);
+    if (!info.isFile() || info.size > 50 * 1024 * 1024) throw invalid('The response file is not a regular file of at most 50 MB.');
+    return false;
+  }
 
   previewBundle(content: string) {
     const bundle = parseBundle(content);
@@ -185,15 +204,32 @@ export class ProjectService extends EventEmitter {
         (existing.active || existing.name.toLowerCase() === collection.name.toLowerCase()),
       ).map((e) => ({ collection: collection.name, method: endpoint.method, path: endpoint.path, existingCollection: existing.name, endpointId: e.id }))),
     ));
+    const warnings = bundle.collections.flatMap((c) => c.endpoints.flatMap((e) => e.scenarios.flatMap((s) => s.bodyFile && this.importFileMissing(s.bodyFile) ? [`File missing: ${s.bodyFile} (${e.method} ${e.path}, ${s.name}).`] : [])));
     const hash = createHash('sha256').update(JSON.stringify({ bundle, revision: this.revision })).digest('hex');
-    return { hash, bundle, conflicts, newCollections: bundle.collections.filter((c) => !project.collections.some((e) => e.name.toLowerCase() === c.name.toLowerCase())).map((c) => c.name) };
+    return { hash, bundle, conflicts, warnings, newCollections: bundle.collections.filter((c) => !project.collections.some((e) => e.name.toLowerCase() === c.name.toLowerCase())).map((c) => c.name) };
   }
 
-  applyBundle(content: string, previewHash: string, strategy: 'skip' | 'rename' | 'replace'): Promise<void> {
+  applyBundle(content: string, previewHash: string, strategy: 'skip' | 'rename' | 'replace', variables: 'keep' | 'overwrite' | 'skip' = 'keep'): Promise<void> {
+    if (!['keep', 'overwrite', 'skip'].includes(variables)) throw invalid('Invalid variable strategy.');
     if (!['skip', 'rename', 'replace'].includes(strategy)) throw invalid('Invalid conflict strategy.');
     return this.mutate((doc) => {
       const preview = this.previewBundle(content);
       if (preview.hash !== previewHash) throw new StudioError('STALE', 'Import preview is stale. Preview again.');
+      if (variables !== 'skip' && preview.bundle.variables) {
+        const entries = variables === 'keep' ? [...Object.entries(preview.bundle.variables), ...Object.entries(doc.studio.variables)] : [...Object.entries(doc.studio.variables), ...Object.entries(preview.bundle.variables)];
+        const merged = Object.fromEntries(entries);
+        if (Object.keys(merged).length > 100) throw invalid('At most 100 variables are allowed.');
+        doc.studio.variables = merged;
+      }
+      const setExtras = (id: string, endpoint: typeof preview.bundle.collections[number]['endpoints'][number], ids: string[]) => {
+        endpoint.scenarios.forEach((scenario, index) => {
+          const sid = ids[index]!;
+          doc.setScenarioDynamic(id, sid, scenario.dynamic === true);
+          doc.updateScenario(id, sid, scenario);
+          doc.setScenarioFile(id, sid, scenario.bodyFile ?? null);
+        });
+        doc.setRequestModel(id, endpoint.requestModel ? sanitizeModelLink(endpoint.requestModel, this.root, this.location.dir) : null, endpoint.invalidRequestScenario === undefined ? undefined : ids[endpoint.scenarios.findIndex((s) => s.name === endpoint.invalidRequestScenario)]);
+      };
       for (const incoming of preview.bundle.collections) {
         let existing = doc.snapshot().collections.find((c) => c.name.toLowerCase() === incoming.name.toLowerCase());
         const conflicts = preview.conflicts.filter((c) => c.collection === incoming.name);
@@ -216,18 +252,22 @@ export class ProjectService extends EventEmitter {
               if (!first) throw invalid('Existing endpoint has no scenarios.');
               for (const old of collision.scenarios.slice(1)) doc.removeScenario(collision.id, old.id);
               const ids = [first.id];
+              doc.setScenarioDynamic(collision.id, first.id, endpoint.scenarios[0]!.dynamic === true);
               doc.updateScenario(collision.id, first.id, endpoint.scenarios[0]!);
               doc.setScenarioRules(collision.id, first.id, endpoint.scenarios[0]!.rules, endpoint.scenarios[0]!.rulesOperator);
               for (const incomingScenario of endpoint.scenarios.slice(1)) {
-                const scenarioId = doc.addScenario(collision.id, incomingScenario);
+                const scenarioId = doc.addScenario(collision.id, { ...incomingScenario, body: incomingScenario.dynamic ? '{}' : incomingScenario.body });
                 doc.setScenarioRules(collision.id, scenarioId, incomingScenario.rules, incomingScenario.rulesOperator);
                 ids.push(scenarioId);
               }
               doc.setActiveScenario(collision.id, ids[endpoint.scenarios.findIndex((s) => s.default)]!);
+              setExtras(collision.id, endpoint, ids);
             }
             continue;
           }
-          const id = doc.addBundleEndpoint(collectionId, endpoint);
+          const id = doc.addBundleEndpoint(collectionId, { ...endpoint, scenarios: endpoint.scenarios.map((s) => ({ ...s, body: s.dynamic ? '{}' : s.body })) });
+          const ids = doc.snapshot().collections.flatMap((c) => c.endpoints).find((e) => e.id === id)!.scenarios.map((s) => s.id);
+          setExtras(id, endpoint, ids);
           if (endpoint.model) doc.setModel(id, sanitizeModelLink(endpoint.model, this.root, this.location.dir));
         }
       }
