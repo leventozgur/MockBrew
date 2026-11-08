@@ -208,10 +208,10 @@ Expose Mockoon's response rules, which already work in the file, through the dom
 
 **Exit criteria:** Profile changes apply without restart; deleting a profile restores the previous scenarios; global delay and timeout are verified with integration tests.
 
-**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+**Status (2026-11-08): done (backend, CLI, MCP, control API and dashboard).**
 - Profiles live in the sidecar (schemaVersion 2 kept: optional fields, passthrough readers). Activation switches the listed endpoints to the chosen scenario in the derived environment without restart and without touching the environment file; deactivation restores the file's selection. `X-Mock-Scenario` still wins. Optional global latency and timeout simulation (all or listed endpoints). Stale references are reported and ignored. Logs carry the profile name and reason `profile`.
 - `mockbrew serve --profile <name>`, `mockbrew profiles list [--json]`, MCP `list_profiles`, `save_profile`, `delete_profile` (preview unless confirm), `activate_profile`, `deactivate_profile`; control API routes. `test/profiles.test.ts` plus CLI/MCP/API coverage.
-- Open: dashboard profile editor and switcher; the UI has no label yet for the `profile` log reason.
+- Dashboard: profiles panel (create/edit, start from current selections, templates "all endpoints -> 401", "5xx", "slow network"), one-click activate/deactivate, active-profile badge with "Turn off", profile reason in the request log. E2E covers template, activation and restore.
 
 ### Milestone 9: Update mocks when the model changes
 
@@ -239,6 +239,11 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 
 **Exit criteria:** Manually verify the flow "create an endpoint with this model, add 3 scenarios and a header condition, start the server" with a real LLM client (at least Claude Code and one other); automatically test all tools with the SDK client.
 
+**Status (2026-11-08): implemented; manual check with a real LLM client open.**
+- MCP now has 49 narrow tools (collections, endpoints, scenarios, rules and modes, profiles, server, logs, model check/update, import/export, recording), a `mockbrew://guide` resource and the prompts `mock_endpoint_from_model` and `add_error_scenarios`.
+- `mockbrew mcp install claude|codex|gemini|copilot|kiro [--scope] [--yes|--print]` runs the client's official `mcp add` command after showing it and asking (non-TTY without `--yes` refuses); Kiro gets a config snippet. Client config files are never edited directly. Tested with fake client executables only.
+- Open: register with a real client (Claude Code and one other) and run the end-to-end flow manually.
+
 ### Milestone 11: Multiple AI CLI providers
 
 - Automatically detect installed CLIs on the machine (scan `PATH`; only `--version` before running): Claude Code (`claude`), Codex (`codex`), GitHub Copilot CLI (`copilot`), Gemini CLI (`gemini`), Kiro CLI (`kiro-cli`).
@@ -264,6 +269,12 @@ Design: [Import and export](ARCHITECTURE.md#import-and-export).
 
 **Exit criteria:** Round-trip test (export -> import produces the same project); synthetic fixture test for every import format; malformed files are rejected without writing anything; recording mode is tested with a local fake backend and sensitive headers are not written to the file.
 
+**Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
+- Bundle `*.mockbrew.json` export/import with preview, hash-approved apply and conflict strategies (skip / rename / replace) in one atomic save; converters for Postman v2.1, OpenAPI 3.0/3.1 JSON (YAML must be converted first), HAR 1.2 and cURL with warnings for unsupported items; export to bundle, Postman v2.1 and OpenAPI. CLI `mockbrew import` / `mockbrew export`, MCP `preview_import`, `apply_import`, `export_bundle`, control API routes.
+- Record mode: while proxying, unmatched requests answered by the backend are captured in memory (sensitive and hop-by-hop headers stripped, sensitive-looking body keys warned, size-limited, truncated recordings cannot be saved), then previewed and saved as endpoints/scenarios with path-pattern overrides. MCP `start_recording`, `stop_recording`, `list_recordings`, `preview_recordings`, `save_recordings`; control API routes. Note: the engine buffers a proxied response fully before its transaction event.
+- Tests: `test/transfer-bundle.test.ts`, `test/import-formats.test.ts`, `test/record-transfer.test.ts`, MCP OpenAPI import (164 tests passing).
+- Open: dashboard import dialog, export menu and recording panel.
+
 ### Milestone 13: End-user distribution and updates
 
 Design: [Distribution and updates](ARCHITECTURE.md#distribution-and-updates).
@@ -275,6 +286,12 @@ Design: [Distribution and updates](ARCHITECTURE.md#distribution-and-updates).
 - Continue publishing to npm (with provenance) as a secondary path for developers.
 
 **Exit criteria:** On clean macOS, Windows, and Linux machines without Node installed, install with one command and run `mockbrew ui`; a package manager or `update` upgrades from the previous version.
+
+**Status (2026-11-08): build tooling done; no release run yet.**
+- `node scripts/sea/build.mjs` builds `dist-bin/mockbrew-<os>-<arch>` + SHA-256 for the current platform (pinned postject; Node 22 required for releases, `--allow-any-node` for local experiments; universal macOS Node refused). Cross-platform asset cache with once-per-version, concurrency-safe extraction. `mockbrew doctor` checks runtime, project, port, UI assets, parser, cache, AI and MCP client CLIs.
+- `.github/workflows/release.yml`: per-platform binaries with smoke tests on tags, draft GitHub Release with SHA256SUMS, manual npm publish with provenance. Homebrew and Scoop templates plus `scripts/release/update-manifests.mjs`.
+- Verified locally: macOS arm64 binary (Node 23.9, ad-hoc signed) passed `--version`, `doctor`, `generate --list`, `serve` + curl.
+- Open: the release workflow has never run (no GitHub repository); Linux, Windows and macOS x64 binaries untested; notarization; tap/bucket repositories; the asset cache does not re-verify files after the first extraction.
 
 ### Milestone 14: Request-aware and validated responses
 
