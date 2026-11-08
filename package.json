@@ -26,7 +26,8 @@
     "test:watch": "vitest",
     "notice": "node scripts/generate-notice.mjs",
     "prepare": "npm run build",
-    "prepack": "npm run notice"
+    "prepack": "npm run notice",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@fastify/static": "10.1.9",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@mockoon/cli": "9.10.0",
+    "@playwright/test": "1.65.0",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
