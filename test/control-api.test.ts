@@ -208,3 +208,14 @@ describe('control API workflows', () => {
     expect(res.snippets.find((s: { id: string }) => s.id === 'android-emulator').code).toContain('10.0.2.2:38999');
   });
 });
+
+it('manages profiles through authenticated control routes', async () => {
+  const endpoint = await service.createEndpoint('root', { method: 'GET', path: '/profile' });
+  const scenario = service.findEndpoint(endpoint).scenarios[0]!.id;
+  expect((await call('/api/profiles', { token: null })).status).toBe(401);
+  const created = await (await call('/api/profiles', { method: 'POST', body: { name: 'Test', endpoints: { [endpoint]: { scenarioId: scenario } } } })).json() as { id: string };
+  expect((await call(`/api/profiles/${created.id}/activate`, { method: 'POST' })).status).toBe(200);
+  expect(await (await call('/api/profiles')).json()).toMatchObject({ activeProfileId: created.id });
+  expect((await call('/api/profiles/deactivate', { method: 'POST' })).status).toBe(200);
+  expect((await call(`/api/profiles/${created.id}`, { method: 'DELETE' })).status).toBe(200);
+});

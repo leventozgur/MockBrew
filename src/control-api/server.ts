@@ -156,6 +156,15 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
   // ---------------------------------------------------------------- project
   app.get('/api/project', async () => service.view());
 
+  app.get('/api/profiles', async () => service.listProfiles());
+  app.post('/api/profiles', async (request) => done(await service.saveProfile(asObject(request.body) as never)));
+  app.put('/api/profiles/:id', async (request) => done(await service.saveProfile(asObject(request.body) as never, (request.params as { id: string }).id)));
+  app.delete('/api/profiles/:id', async (request) => { await service.deleteProfile((request.params as { id: string }).id); return done(); });
+  app.post('/api/profiles/capture', async (request) => done(await service.captureProfileFromCurrent(str(asObject(request.body).name, 'name'))));
+  app.post('/api/profiles/:id/activate', async (request) => { await service.activateProfile((request.params as { id: string }).id); return done(); });
+  app.post('/api/profiles/deactivate', async () => { await service.deactivateProfile(); return done(); });
+
+
   app.get('/api/poll', async (request): Promise<PollResponse> => {
     const query = request.query as { revision?: string; after?: string };
     const revision = Number(query.revision ?? 0);

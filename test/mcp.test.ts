@@ -42,13 +42,23 @@ afterEach(async () => {
 describe('MCP server', () => {
   it('offers only narrow tools: no shell and no arbitrary file access', async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual(['apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'delete_collection', 'delete_endpoint', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'parse_model', 'preview_model_update', 'reorder_scenarios', 'reset_request_counters', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['activate_profile', 'apply_model_update', 'check_models', 'create_collection', 'create_endpoint', 'deactivate_profile', 'delete_collection', 'delete_endpoint', 'delete_profile', 'delete_scenario', 'generate_sample', 'get_request_logs', 'get_schema', 'list_collections', 'list_endpoints', 'list_profiles', 'parse_model', 'preview_model_update', 'reorder_scenarios', 'reset_request_counters', 'save_profile', 'save_scenario', 'server_status', 'set_active_scenario', 'set_collection_active', 'set_endpoint_mode', 'set_scenario_rules', 'start_server', 'stop_server', 'update_collection', 'update_endpoint', 'update_scenario', 'validate_body']);
     expect(client.getInstructions()).toContain('parse_model');
     expect(tools.find((t) => t.name === 'preview_model_update')?.annotations?.readOnlyHint).toBe(true);
     expect((await call('preview_model_update')).json().endpoints).toEqual([]);
     expect((await call('apply_model_update', { selection: [{ endpointId: 'x', scenarioIds: ['y'] }], previewHash: 'invalid' })).isError).toBe(true);
     const save = tools.find((t) => t.name === 'save_scenario');
     expect(save?.annotations?.destructiveHint).toBe(false);
+  });
+
+  it('manages profiles and previews deletion', async () => {
+    const saved = (await call('save_scenario', { collection: 'Auth', method: 'GET', path: '/auth', scenarioName: 'Expired', statusCode: 401, body: '{}' })).json();
+    const id = (await call('save_profile', { name: 'Expired', endpoints: { [saved.endpointId]: { scenarioId: saved.scenarioId } } })).json().id;
+    expect((await call('activate_profile', { profileId: id })).isError).toBe(false);
+    expect((await call('list_profiles')).json().activeProfileId).toBe(id);
+    expect((await call('delete_profile', { profileId: id })).json().deleted).toBe(false);
+    expect((await call('deactivate_profile')).isError).toBe(false);
+    expect((await call('delete_profile', { profileId: id, confirm: true })).json().deleted).toBe(true);
   });
 
   it('previews and applies a model update with the approved hash', async () => {

@@ -28,7 +28,8 @@ export interface RequestLog {
   proxied: boolean;
   endpointId?: string;
   scenario?: string;
-  scenarioReason?: 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random';
+  scenarioReason?: 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random' | (string & {});
+  profile?: string;
   matchedRules?: number[];
   requestHeaders: Header[];
   responseHeaders: Header[];
@@ -170,3 +171,6 @@ export interface ModelUpdateScenario { scenarioId: string; scenario: string; bod
 export interface ModelUpdateEndpoint { endpointId: string; collection: string; method: string; path: string; schema?: JsonSchema; scenarios: ModelUpdateScenario[]; unavailable?: string }
 export interface ModelUpdatePreview { hash: string; endpoints: ModelUpdateEndpoint[] }
 export interface ModelUpdateSelection { endpointId: string; scenarioIds: string[] }
+
+export interface ProfilesView { profiles: import('./model.js').Profile[]; activeProfileId: string | null }
+export type ProfileRequest = import('./model.js').ProfileInput;

@@ -6,6 +6,7 @@ import type { ModelLink } from '../core/model.js';
 import type { ProjectService } from '../core/service.js';
 import { VARIANTS } from '../generator/index.js';
 import { validateBody } from '../schema/index.js';
+import { registerProfileTools } from './tools/profiles.js';
 import { registerProjectTools } from './tools/project.js';
 import { registerModelTools } from './tools/models.js';
 
@@ -19,6 +20,7 @@ Typical flow for "make a mock for this model":
 3. Write the JSON body (generate_sample gives a deterministic baseline you can edit), then check it with validate_body.
 4. save_scenario stores it as a scenario of GET/POST/... <path> in a collection. The body is validated against the model and rejected when it does not match.
 For a 401 when Authorization is missing, set a header rule with modifier Authorization and operator null. For an empty list at page=99, use query page equals 99. For premium prices use body $.type equals premium. For a first 500 then 200, order those scenarios and use sequential mode. X-Mock-Scenario selects a scenario by name or id in app debug menus in rules and fixed modes; sequential and random modes do not support this override.
+Create a 'Session expired' profile that serves 401 on all authenticated endpoints by selecting their 401 scenarios with save_profile, then activate_profile. Profile selections yield to X-Mock-Scenario.
 Use list_collections and list_endpoints to find IDs, manage collections, endpoints and scenarios with their respective tools, and review deletion previews before confirming. Start the mock server with start_server, inspect server_status and get_request_logs, and stop it with stop_server. check_models reports model drift without changing files.
 Nothing here executes model code or touches files outside the project root.`;
 
@@ -76,6 +78,7 @@ export function createMcpServer(service: ProjectService, version: string): McpSe
   const server = new McpServer({ name: 'mockbrew', version }, { instructions });
   const readOnly = { readOnlyHint: true, openWorldHint: false };
   registerProjectTools(server, service);
+  registerProfileTools(server, service);
   registerModelTools(server, service);
 
   server.registerTool(

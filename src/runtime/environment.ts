@@ -14,6 +14,7 @@ import type { ProjectDocument } from '../store/document.js';
 export interface RuntimeOverrides {
   port?: number;
   host?: string;
+  profileId?: string;
 }
 
 export interface RuntimeEnvironment {
@@ -22,7 +23,8 @@ export interface RuntimeEnvironment {
   catchAllIds: Set<string>;
   /** Scenario names by route response uuid, for request logs. */
   scenarioNames: Map<string, string>;
-  scenarioReasons: Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random'>;
+  scenarioReasons: Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random' | 'profile'>;
+  profileName?: string;
   /** Number of served routes (without the catch-alls). */
   routeCount: number;
   /** What safe mode switched off for this project; empty when templating is allowed or nothing was affected. */
@@ -137,10 +139,22 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   if (overrides.port !== undefined) environment.port = overrides.port;
   if (overrides.host !== undefined) environment.hostname = overrides.host;
 
-  const scenarioReasons = new Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random'>();
+  const profile = document.studio.profiles[overrides.profileId ?? document.studio.activeProfileId ?? ''];
+  if (profile?.network?.latencyMs) environment.latency += profile.network.latencyMs;
+  const scenarioReasons = new Map<string, 'forced' | 'rule' | 'default' | 'fixed' | 'sequential' | 'random' | 'profile'>();
   for (const route of environment.routes) {
+    const selection = profile?.endpoints[route.uuid];
+    const selected = selection && route.responses.find((r) => r.uuid === selection.scenarioId);
+    if (selected) {
+      for (const response of route.responses) response.default = response === selected;
+      route.responseMode = 'DISABLE_RULES' as Route['responseMode'];
+    }
+    const timeout = profile?.network?.timeoutEndpoints;
+    if (timeout === 'all' || (Array.isArray(timeout) && timeout.includes(route.uuid))) {
+      for (const response of route.responses) response.latency += profile?.network?.timeoutMs ?? 120000;
+    }
     const mode = route.responseMode;
-    for (const response of route.responses) scenarioReasons.set(response.uuid, mode === 'DISABLE_RULES' ? 'fixed' : mode === 'SEQUENTIAL' ? 'sequential' : mode === 'RANDOM' ? 'random' : response.rules.length ? 'rule' : 'default');
+    for (const response of route.responses) scenarioReasons.set(response.uuid, selected && response === selected ? 'profile' : mode === 'DISABLE_RULES' ? 'fixed' : mode === 'SEQUENTIAL' ? 'sequential' : mode === 'RANDOM' ? 'random' : response.rules.length ? 'rule' : 'default');
     if (!document.studio.settings.scenarioOverrideHeader) continue;
     // The engine bypasses all rules in sequential and random modes. Keep their native
     // selection intact; forced headers are unavailable in these two modes.
@@ -148,6 +162,7 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
       safeModeNotes.push(`Scenario override header is unavailable for ${mode} mode on ${route.endpoint}`);
       continue;
     }
+    // Hidden header copies precede profile defaults and therefore always win.
     const copies = route.responses.flatMap((response, index) => [response.label || (index === 0 ? 'Default' : `Response ${index + 1}`), response.uuid].filter((value) => !value.includes('{{')).map((value) => {
       const copy = structuredClone(response);
       copy.uuid = randomUUID();
@@ -169,6 +184,7 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   if (!environment.proxyMode && environment.endpointPrefix === '') {
     for (const method of CATCH_ALL_METHODS) {
       const route = catchAllRoute(method);
+      if (profile?.network?.timeoutEndpoints === 'all') route.responses[0]!.latency += profile.network.timeoutMs ?? 120000;
       catchAllIds.add(route.uuid);
       environment = addRouteMutator(environment, route, 'root');
     }
@@ -178,5 +194,5 @@ export function buildRuntimeEnvironment(document: ProjectDocument, overrides: Ru
   for (const route of environment.routes) {
     for (const response of route.responses) scenarioNames.set(response.uuid, response.label);
   }
-  return { environment, catchAllIds, scenarioNames, scenarioReasons, routeCount, safeModeNotes };
+  return { environment, catchAllIds, scenarioNames, scenarioReasons, routeCount, safeModeNotes, profileName: profile?.name };
 }

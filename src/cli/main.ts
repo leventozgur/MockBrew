@@ -9,6 +9,7 @@ import { exportCommand, exportHelp } from './commands/export.js';
 import { generateCommand, generateHelp } from './commands/generate.js';
 import { initCommand, initHelp } from './commands/init.js';
 import { mcpCommand, mcpHelp } from './commands/mcp.js';
+import { profilesCommand, profilesHelp } from './commands/profiles.js';
 import { serveCommand, serveHelp } from './commands/serve.js';
 import { snippetsCommand, snippetsHelp } from './commands/snippets.js';
 import { uiCommand, uiHelp } from './commands/ui.js';
@@ -23,6 +24,7 @@ Commands:
   init       Create a project
   ui         Start the local web UI
   serve      Run a project's mocks without the UI
+  profiles   List test profiles (profiles list)
   generate   Create a JSON body from Kotlin/Swift models
   check      Compare linked models and saved bodies with the current source code
   export     Write an OpenAPI document (export openapi)
@@ -35,6 +37,7 @@ const helps: Record<string, string> = {
   init: initHelp,
   ui: uiHelp,
   serve: serveHelp,
+  profiles: profilesHelp,
   generate: generateHelp,
   check: checkHelp,
   export: exportHelp,
@@ -73,6 +76,8 @@ async function run(argv: string[]): Promise<void> {
       return uiCommand(rest, consoleIo);
     case 'serve':
       return serveCommand(rest, consoleIo);
+    case 'profiles':
+      return profilesCommand(rest, consoleIo);
     case 'generate':
       return generateCommand(rest, consoleIo);
     case 'check':

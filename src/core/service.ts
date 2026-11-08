@@ -1,10 +1,11 @@
 import { EventEmitter } from 'node:events';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { RuntimeOverrides } from '../runtime/environment.js';
 import { buildRuntimeEnvironment } from '../runtime/environment.js';
 import { MockRuntime } from '../runtime/runtime.js';
 import { type ValidationIssue, validateBody as validateAgainstSchema } from '../schema/index.js';
+import { profileSchema } from '../store/studio-file.js';
 import type { ProjectDocument } from '../store/document.js';
 import {
   type FileHashes,
@@ -28,6 +29,8 @@ import type {
   HttpMethod,
   ModelLink,
   ProjectModel,
+  Profile,
+  ProfileInput,
   ScenarioInput,
   SettingsPatch,
 } from './model.js';
@@ -252,6 +255,68 @@ export class ProjectService extends EventEmitter {
       this.emit('changed', { external: true });
     });
   }
+
+  listProfiles(): { profiles: Profile[]; activeProfileId: string | null } {
+    const endpoints = this.document.snapshot().collections.flatMap((c) => c.endpoints);
+    const profiles = Object.entries(this.document.studio.profiles).map(([id, profile]) => {
+      const staleReferences: string[] = [];
+      for (const [endpointId, selection] of Object.entries(profile.endpoints)) {
+        const endpoint = endpoints.find((e) => e.id === endpointId);
+        if (!endpoint || !endpoint.scenarios.some((s) => s.id === selection.scenarioId)) staleReferences.push(endpointId);
+      }
+      if (Array.isArray(profile.network?.timeoutEndpoints)) for (const id of profile.network.timeoutEndpoints) {
+        if (!endpoints.some((e) => e.id === id) && !staleReferences.includes(id)) staleReferences.push(id);
+      }
+      return { ...profile, id, staleReferences } as Profile;
+    });
+    return { profiles, activeProfileId: this.document.studio.activeProfileId ?? null };
+  }
+
+  saveProfile(input: ProfileInput, id?: string): Promise<string> {
+    return this.mutate((doc) => {
+      const parsed = profileSchema.safeParse(input);
+      if (!parsed.success) throw invalid(`Invalid profile: ${parsed.error.issues[0]?.message}`);
+      const profile = parsed.data;
+      if (id && !doc.studio.profiles[id]) throw notFound('Profile', id);
+      if (Object.entries(doc.studio.profiles).some(([key, p]) => key !== id && p.name.toLowerCase() === profile.name.toLowerCase())) throw invalid('Profile names must be unique.');
+      const endpoints = doc.snapshot().collections.flatMap((c) => c.endpoints);
+      for (const [endpointId, selection] of Object.entries(profile.endpoints)) {
+        const endpoint = endpoints.find((e) => e.id === endpointId);
+        if (!endpoint || !endpoint.scenarios.some((s) => s.id === selection.scenarioId)) throw invalid(`Invalid profile reference: ${endpointId}.`);
+      }
+      if (Array.isArray(profile.network?.timeoutEndpoints) && profile.network.timeoutEndpoints.some((id) => !endpoints.some((e) => e.id === id))) throw invalid('Invalid timeout endpoint reference.');
+      const key = id ?? randomUUID();
+      if (!id && Object.keys(doc.studio.profiles).length >= 200) throw invalid('Too many profiles.');
+      doc.studio.profiles[key] = profile;
+      return key;
+    });
+  }
+
+  captureProfileFromCurrent(name: string): Promise<string> {
+    const endpoints: ProfileInput['endpoints'] = {};
+    const active = this.document.studio.profiles[this.document.studio.activeProfileId ?? ''];
+    for (const endpoint of this.model().collections.flatMap((c) => c.endpoints)) {
+      const selection = active?.endpoints[endpoint.id];
+      const scenario = endpoint.scenarios.find((s) => s.id === selection?.scenarioId) ?? endpoint.scenarios.find((s) => s.active);
+      if (scenario) endpoints[endpoint.id] = { scenarioId: scenario.id };
+    }
+    return this.saveProfile({ name, endpoints });
+  }
+
+  deleteProfile(id: string): Promise<void> {
+    return this.mutate((doc) => {
+      if (!doc.studio.profiles[id]) throw notFound('Profile', id);
+      delete doc.studio.profiles[id];
+      if (doc.studio.activeProfileId === id) doc.studio.activeProfileId = null;
+    });
+  }
+  activateProfile(id: string): Promise<void> {
+    return this.mutate((doc) => {
+      if (!doc.studio.profiles[id]) throw notFound('Profile', id);
+      doc.studio.activeProfileId = id;
+    });
+  }
+  deactivateProfile(): Promise<void> { return this.mutate((doc) => { doc.studio.activeProfileId = null; }); }
 
   createCollection(name: string): Promise<string> {
     return this.mutate((doc) => doc.addCollection(name));
@@ -535,6 +600,11 @@ export class ProjectService extends EventEmitter {
   }
 
   // ---------------------------------------------------------------- runtime
+
+  setRuntimeProfile(id: string): void {
+    if (!this.document.studio.profiles[id]) throw notFound('Profile', id);
+    this.overrides = { ...this.overrides, profileId: id };
+  }
 
   async start(): Promise<RuntimeStatus> {
     const conflicts = errorConflicts(detectConflicts(this.document.snapshot()));

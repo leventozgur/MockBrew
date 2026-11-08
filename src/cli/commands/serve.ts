@@ -9,6 +9,7 @@ Runs the active collections of a project on one port, without the UI. Changes to
 
 Options:
   -p, --project <path>  Project folder or file (default: ./ or ./mocks)
+      --profile <name>  Select a profile for this run
       --port <n>        Override the port for this run
       --host <address>  Override the listen address for this run (default 127.0.0.1)
       --lan             Listen on all interfaces (0.0.0.0) so physical devices can connect.
@@ -27,6 +28,7 @@ export async function serveCommand(argv: string[], io: Io): Promise<void> {
     options: {
       project: { type: 'string', short: 'p' },
       port: { type: 'string' },
+      profile: { type: 'string' },
       host: { type: 'string' },
       lan: { type: 'boolean' },
       root: { type: 'string' },
@@ -38,6 +40,12 @@ export async function serveCommand(argv: string[], io: Io): Promise<void> {
     root: values.root,
     overrides: { port: parsePort(values.port), host: values.lan ? '0.0.0.0' : values.host },
   });
+
+  if (values.profile) {
+    const profile = service.listProfiles().profiles.find((p) => p.name.toLowerCase() === values.profile!.toLowerCase());
+    if (!profile) { await service.close(); throw new UsageError(`Profile "${values.profile}" was not found.`); }
+    service.setRuntimeProfile(profile.id);
+  }
 
   const printState = (prefix: string) => {
     const view = service.view();

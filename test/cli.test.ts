@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { ProjectService } from '../src/core/service.js';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 const cli = path.resolve('dist/cli/main.js');
@@ -51,6 +52,25 @@ function startLongRunning(args: string[], readyText: RegExp): Promise<{ output: 
 }
 
 describe('cli', () => {
+  it('serves a named profile without changing the active profile on disk', async () => {
+    const port = await freePort();
+    const project = await ProjectService.init(path.join(dir, 'mocks'), 'CLI', { port });
+    const endpoint = await project.createEndpoint('root', { method: 'GET', path: '/test' });
+    const scenario = await project.createScenario(endpoint, { name: 'Expired', statusCode: 401, body: '{}' });
+    await project.saveProfile({ name: 'Expired', endpoints: { [endpoint]: { scenarioId: scenario } } });
+    await project.close();
+    await startLongRunning(['serve', '-p', 'mocks', '--profile', 'Expired'], /Mock server running/);
+    expect((await fetch(`http://127.0.0.1:${port}/test`)).status).toBe(401);
+    const reopened = await ProjectService.open(path.join(dir, 'mocks'));
+    expect(reopened.listProfiles().activeProfileId).toBeNull();
+    await reopened.close();
+    const list = run(['profiles', 'list', '-p', 'mocks']);
+    expect(list.code).toBe(0);
+    expect(list.out).toContain('Expired  (1 endpoint(s))');
+    expect(JSON.parse(run(['profiles', 'list', '-p', 'mocks', '--json']).out).profiles[0]).toMatchObject({ name: 'Expired', staleReferences: [] });
+    expect(run(['profiles', 'nope', '-p', 'mocks']).code).toBe(2);
+  });
+
   it('prints help and version', () => {
     expect(run(['--help']).out).toContain('Commands:');
     expect(run(['serve', '--help']).out).toContain('--lan');

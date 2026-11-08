@@ -128,3 +128,11 @@ export interface SettingsPatch {
   allowTemplating?: boolean;
   scenarioOverrideHeader?: boolean;
 }
+
+export interface ProfileInput {
+  name: string;
+  description?: string;
+  endpoints: Record<string, { scenarioId: string; mode?: 'fixed' }>;
+  network?: { latencyMs?: number; timeoutEndpoints?: 'all' | string[]; timeoutMs?: number };
+}
+export interface Profile extends ProfileInput { id: string; staleReferences: string[] }

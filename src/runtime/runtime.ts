@@ -199,6 +199,7 @@ export class MockRuntime extends EventEmitter {
       entry.endpointId = transaction.routeUUID;
       entry.scenario = current?.scenarioNames.get(transaction.routeResponseUUID);
       entry.scenarioReason = current?.scenarioReasons.get(transaction.routeResponseUUID);
+      if (current?.profileName) entry.profile = current.profileName;
       const route = current?.environment.routes.find((r) => r.uuid === transaction.routeUUID);
       const selected = route?.responses.find((r) => r.uuid === transaction.routeResponseUUID);
       if (entry.scenarioReason === 'rule' && selected?.default) {
