@@ -87,7 +87,7 @@ describe('model drift in a project', () => {
   let service: ProjectService;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-m5-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-m5-'));
     await fs.mkdir(path.join(dir, 'app'));
     await fs.writeFile(path.join(dir, 'app/Order.kt'), V1);
     service = await ProjectService.init(path.join(dir, 'mocks'), 'Shop', { port: 38555, root: dir });
@@ -157,7 +157,7 @@ describe('OpenAPI export', () => {
   let service: ProjectService;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-oas-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-oas-'));
     await fs.mkdir(path.join(dir, 'app'));
     await fs.writeFile(path.join(dir, 'app/Order.kt'), V1);
     service = await ProjectService.init(path.join(dir, 'mocks'), 'Shop API', { port: 38556, root: dir });
@@ -241,7 +241,7 @@ describe('proxy fallback', () => {
   }
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-proxy-'));
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-proxy-'));
     seen.length = 0;
     upstream = createServer((req, res) => {
       seen.push({ url: req.url, auth: req.headers.authorization });

@@ -54,7 +54,7 @@ export function App() {
     return (
       <div className="centered">
         <h1>Session ended</h1>
-        <p>The session token is missing, wrong or expired. Run <code>mock-studio ui</code> again and open the address it prints.</p>
+        <p>The session token is missing, wrong or expired. Run <code>mockbrew ui</code> again and open the address it prints.</p>
       </div>
     );
   }

@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { buildOpenApi } from '../../core/openapi.js';
 import { type Io, UsageError, openProject } from '../common.js';
 
-export const exportHelp = `mock-studio export openapi [--project <path>]
+export const exportHelp = `mockbrew export openapi [--project <path>]
 
 Writes an OpenAPI 3.1 document built from the endpoints, scenarios and linked models of a project. Treat it
 as a contract proposal for the backend team.
@@ -27,7 +27,7 @@ export async function exportCommand(argv: string[], io: Io): Promise<void> {
       'include-inactive': { type: 'boolean' },
     },
   });
-  if (positionals[0] !== 'openapi' || positionals.length !== 1) throw new UsageError('Usage: mock-studio export openapi [options].');
+  if (positionals[0] !== 'openapi' || positionals.length !== 1) throw new UsageError('Usage: mockbrew export openapi [options].');
   const service = await openProject(values.project);
   try {
     const document = buildOpenApi(service.model(), {

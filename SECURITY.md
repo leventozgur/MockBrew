@@ -10,4 +10,4 @@ Please report vulnerabilities privately through [GitHub Security Advisories](../
 
 ## Scope and security notes
 
-Mock API Studio is a local development tool. Its Control API binds to loopback by default. The mock listener also binds to loopback by default; LAN access is available only when the user explicitly enables it. The tool has no telemetry. See [Architecture and Security](docs/ARCHITECTURE.md#security-defaults) for the security model and limitations.
+MockBrew is a local development tool. Its Control API binds to loopback by default. The mock listener also binds to loopback by default; LAN access is available only when the user explicitly enables it. The tool has no telemetry. See [Architecture and Security](docs/ARCHITECTURE.md#security-defaults) for the security model and limitations.

@@ -73,7 +73,7 @@ function input(args: { files?: { name: string; content: string }[]; paths?: stri
 }
 
 export function createMcpServer(service: ProjectService, version: string): McpServer {
-  const server = new McpServer({ name: 'mock-api-studio', version }, { instructions });
+  const server = new McpServer({ name: 'mockbrew', version }, { instructions });
   const readOnly = { readOnlyHint: true, openWorldHint: false };
   registerProjectTools(server, service);
   registerModelTools(server, service);

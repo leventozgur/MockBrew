@@ -12,7 +12,7 @@ let service: ProjectService;
 let api: ControlApi;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-api-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-api-'));
   await fs.cp(path.join(import.meta.dirname, 'fixtures'), path.join(dir, 'fixtures'), { recursive: true });
   service = await ProjectService.init(dir, 'API Test', { port: 38999 });
   api = await startControlApi({ service, uiDir: path.join(dir, 'no-ui') });

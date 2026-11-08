@@ -15,9 +15,9 @@ import { uiCommand, uiHelp } from './commands/ui.js';
 
 const MIN_NODE = [22, 12];
 
-const mainHelp = `mock-studio - offline mock API studio for Android, iOS and Kotlin Multiplatform
+const mainHelp = `mockbrew - offline mock API studio for Android, iOS and Kotlin Multiplatform
 
-Usage: mock-studio <command> [options]
+Usage: mockbrew <command> [options]
 
 Commands:
   init       Create a project
@@ -29,7 +29,7 @@ Commands:
   snippets   Debug network setup for emulators, simulators and devices
   mcp        Start the MCP server (stdio) for Kiro / Copilot
 
-Run "mock-studio <command> --help" for details.`;
+Run "mockbrew <command> --help" for details.`;
 
 const helps: Record<string, string> = {
   init: initHelp,
@@ -84,12 +84,12 @@ async function run(argv: string[]): Promise<void> {
     case 'mcp':
       return mcpCommand(rest);
     default:
-      throw new UsageError(`Unknown command "${command}". Run "mock-studio --help".`);
+      throw new UsageError(`Unknown command "${command}". Run "mockbrew --help".`);
   }
 }
 
 try {
-  if (isSea() && process.env.MOCK_STUDIO_SEA_WORKER === '1' && process.send) {
+  if (isSea() && process.env.MOCKBREW_SEA_WORKER === '1' && process.send) {
     setFlagsFromString('--liftoff-only --no-wasm-tier-up --no-wasm-dynamic-tiering');
     await import('../parser/worker.js');
   } else {
@@ -106,7 +106,7 @@ try {
     process.exitCode = 2;
   } else {
     consoleIo.err(`Error: ${(error as Error).message}`);
-    if (process.env.MOCK_STUDIO_DEBUG) consoleIo.err((error as Error).stack ?? '');
+    if (process.env.MOCKBREW_DEBUG) consoleIo.err((error as Error).stack ?? '');
     process.exitCode = 1;
   }
 }

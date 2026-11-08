@@ -56,7 +56,7 @@ export function sanitizedEnv(source: NodeJS.ProcessEnv = process.env, extra: str
  * Output is size limited; the process is killed on timeout or cancellation.
  */
 export async function runCli(invocation: CliInvocation, options: RunOptions): Promise<RunResult> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-ai-'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-ai-'));
   const cwd = path.join(root, 'work');
   const configDir = path.join(root, 'config');
   await fs.mkdir(cwd);

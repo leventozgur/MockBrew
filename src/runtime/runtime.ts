@@ -15,7 +15,7 @@ export interface RuntimeOptions {
 }
 
 const MAX_LOGGED_BODY = 10_000;
-const ENV_VARS_PREFIX = 'MOCK_STUDIO_';
+const ENV_VARS_PREFIX = 'MOCKBREW_';
 
 const ERROR_MESSAGES: Partial<Record<ServerErrorCodes, (port: number, host: string) => string>> = {
   [ServerErrorCodes.PORT_ALREADY_USED]: (port) => `Port ${port} is already in use. Stop the other process or choose another port.`,

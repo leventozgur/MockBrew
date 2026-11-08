@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { createMcpServer } from '../../mcp/server.js';
 import { openProject, packageVersion } from '../common.js';
 
-export const mcpHelp = `mock-studio mcp [--project <path>] [--root <dir>]
+export const mcpHelp = `mockbrew mcp [--project <path>] [--root <dir>]
 
 Starts the MCP server on stdio for Kiro, GitHub Copilot and other MCP clients. The tools only parse
 model code, validate bodies and save scenarios into the project; there is no shell or arbitrary file access.

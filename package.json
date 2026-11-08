@@ -1,11 +1,11 @@
 {
-  "name": "@mock-api-studio/studio",
+  "name": "mockbrew",
   "version": "0.1.0",
   "description": "Offline-first mock API studio for Android, iOS and Kotlin Multiplatform development.",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "mock-studio": "dist/cli/main.js"
+    "mockbrew": "dist/cli/main.js"
   },
   "files": [
     "dist",

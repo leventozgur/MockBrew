@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Mock API Studio. Contributions should preserve the project's local-first behavior and security boundaries.
+Thanks for helping improve MockBrew. Contributions should preserve the project's local-first behavior and security boundaries.
 
 ## Setup and commands
 

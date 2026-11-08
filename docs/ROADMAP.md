@@ -36,7 +36,7 @@ Decision details: [Architecture - M0 technical validation results](ARCHITECTURE.
 - **Platform:** Node >= 22.12; the full test suite passed on Node 22.23, 24.22, and 25.9. Not tested outside macOS; the CI matrix is defined in `.github/workflows/ci.yml`.
 - **MCP:** `@modelcontextprotocol/sdk` 1.32.2, stdio; the tool list is in the [Architecture](ARCHITECTURE.md#mcp-server-primary) section.
 - **Mockoon desktop compatibility:** Verified (automated test) with Mockoon's own `EnvironmentSchema` validation and Mockoon CLI 9.10.0. The desktop app is not installed on this machine, so opening and editing in both directions were not manually tested; file watching and loading external changes were tested in the tool.
-- **Team codebase scan:** Not done (no access to the codebase). Moshi `@Json(name, ignore)` was included because it was inexpensive; sealed classes, inheritance, `init(from:)`, and custom serializers are unsupported and explicitly reported. Running `mock-studio generate --list` on real models and reviewing the reported `issues` list will close this item.
+- **Team codebase scan:** Not done (no access to the codebase). Moshi `@Json(name, ignore)` was included because it was inexpensive; sealed classes, inheritance, `init(from:)`, and custom serializers are unsupported and explicitly reported. Running `mockbrew generate --list` on real models and reviewing the reported `issues` list will close this item.
 
 ## Milestone 1: Model-to-output core
 
@@ -140,7 +140,7 @@ Items to evaluate (write separate acceptance criteria for each):
 |---|---|---|---|
 | Proxy / fallback UI | Done | Disabled by default; when enabled, only unmatched requests go to the specified backend, while a matching mock takes precedence; `proxied` appears in the log; backend address must be `http(s)`, contain no credentials, and must not point to the mock server itself. | Verified (`test/m5.test.ts`) |
 | LAN binding UI for physical iOS devices | Done | Explicitly approved LAN option (`0.0.0.0`) in settings; UI and `serve` warn when enabled; connection guide shows the LAN IP; default is `127.0.0.1`. | Verified (`test/project.test.ts`, `test/cli.test.ts`); physical device not tested |
-| Schema diff when the model changes | Done | Reload the linked model's source files; list added/deleted/type-changed fields, required-field and enum changes as breaking or compatible; validate saved bodies against the new schema; `mock-studio check` exits with 1 if there are breaking changes. | Verified (`test/m5.test.ts`) |
+| Schema diff when the model changes | Done | Reload the linked model's source files; list added/deleted/type-changed fields, required-field and enum changes as breaking or compatible; validate saved bodies against the new schema; `mockbrew check` exits with 1 if there are breaking changes. | Verified (`test/m5.test.ts`) |
 | OpenAPI export from generated schemas | Done | OpenAPI 3.1; path parameters use `{id}`, status codes come from scenarios, 2xx responses use the linked model schema and example bodies; same-named types with different shapes are disambiguated; inactive collections are excluded by default. This is a contract proposal for the backend team. | Verified (`test/m5.test.ts`); not tried with an external OpenAPI validator |
 | UI for request-based response rules | Deferred; moved to M7 (2026-11-08) | Rules are preserved in the file and work; edit by opening the same file in Mockoon desktop. If a UI is built: add/remove/reorder rules (target/modifier/value/operator), validate before saving, and round-trip with desktop using the same file. | Open |
 | Sealed class / polymorphism, inheritance | Deferred | Explicitly reported as unsupported in the first version (`sealed-class`, `inheritance`). If implemented: `oneOf` schema from sealed subtypes, configurable `type` discriminator, and a generation variant for each subtype. Included in scope for Moshi in M0. | Open |
@@ -165,7 +165,7 @@ Principle: Every new feature is implemented in core and made available through *
 - Add `windows-latest` to the CI matrix; run CI for the first time.
 - `CONTRIBUTING.md`, `SECURITY.md`, issue/PR templates, `CHANGELOG.md`.
 - Translate all documentation into English (user decision, 2026-11-08); code and UI text are already in English.
-- **Name check:** Check the "Mock API Studio" name for conflicts and distinctiveness on GitHub, npm, and Homebrew; suggest a new name to the user if needed.
+- **Name check:** Check the "MockBrew" name for conflicts and distinctiveness on GitHub, npm, and Homebrew; suggest a new name to the user if needed.
 - **Single-binary prototype (Node SEA):** Can `serve`, `ui`, `mcp`, and the parser child process (WASM) run with UI assets in a single executable? The result determines the M13 distribution design.
 - **Dependency note:** Explain in the README how `npm audit` warnings (faker/joi pulled in through Mockoon) are mitigated by safe mode; add a periodic dependency update step to the DEVELOPMENT guide.
 - **UI E2E tests:** Initial Playwright tests for core dashboard flows (create collection/endpoint/scenario, start server, logs); later milestones protect UI changes with these tests.
@@ -175,7 +175,7 @@ Principle: Every new feature is implemented in core and made available through *
 **Status (2026-11-08): in progress.**
 - Done: git repository (local, no remote) with company references removed; flaky `test/ai.test.ts` fixed (5 consecutive focused runs and full suite passed); `windows-latest` added to the CI matrix; docs translated to English; CONTRIBUTING, SECURITY, CHANGELOG and issue/PR templates; `npm audit` note and periodic dependency review step; Playwright E2E suite (`npm run test:e2e`, 1 scenario covering scenario editing, live switching, logs and local generation; passed locally) and a separate CI job.
 - SEA prototype: works on macOS arm64 (see [SEA research](research/SEA.md)); release work remains for M13.
-- Open: CI has never run (no GitHub repository yet); name decision pending: `mock-api-studio` is taken on npm and GitHub, `@mock-api-studio` scope ownership unverified (research 2026-11-08).
+- Open: CI has never run (no GitHub repository yet); name decided: **MockBrew** (user, 2026-11-08; the previous name was taken). Package/command `mockbrew`, free on npm and Homebrew on 2026-11-08; GitHub not verified.
 
 ### Milestone 7: Conditional responses (rule engine)
 
@@ -214,14 +214,14 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 
 - **Merge suggestion** for each linked scenario: preserve existing values, fill new fields with the local generator, remove deleted fields, regenerate fields whose types changed, and replace values outside an enum with a valid value.
 - Per-scenario diff preview and approval; "apply all".
-- CLI: `mock-studio check --fix` (preview), `--fix --yes` (apply). MCP: `check_models`, `apply_model_update`. UI: model-change notification and one-click update.
+- CLI: `mockbrew check --fix` (preview), `--fix --yes` (apply). MCP: `check_models`, `apply_model_update`. UI: model-change notification and one-click update.
 - Watch source files; show a warning on the dashboard when a model changes.
 
 **Exit criteria:** For fixtures with added/deleted/type-changed/enum-changed/nullable-changed fields, the updated body is valid against the new schema and manually entered values are preserved; 4xx/5xx scenarios are untouched.
 
 **Status (2026-11-08): backend, CLI, MCP and control API done; dashboard UI open.**
 - `src/core/model-update.ts`: merge keeps valid manual values and raw number lexemes (64-bit safe), adds required fields with the local generator (optional fields on request), removes unknown fields, regenerates type/enum/nullability changes, keeps the body's indentation style.
-- Preview and hash-approved apply in the service, `mock-studio check --fix [--yes]`, MCP `preview_model_update` / `apply_model_update`, control API routes. Only model-bound 2xx scenarios change; non-JSON bodies are reported as skipped. `test/model-update.test.ts` plus CLI/MCP/API coverage (128 tests passing).
+- Preview and hash-approved apply in the service, `mockbrew check --fix [--yes]`, MCP `preview_model_update` / `apply_model_update`, control API routes. Only model-bound 2xx scenarios change; non-JSON bodies are reported as skipped. `test/model-update.test.ts` plus CLI/MCP/API coverage (128 tests passing).
 - Open: dashboard notification and one-click update; source file watching for model changes.
 
 ### Milestone 10: Fully automated use through MCP
@@ -229,7 +229,7 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 - Missing tools: create/update/delete endpoints; update/delete/activate scenarios; rules and endpoint mode; test profiles; create/activate collections; start/stop/check server status; recent request logs; model check and update; import/export.
 - Keep tools narrow: no shell, no arbitrary file reads/writes, preserve the `--root` boundary. Destructive tools (delete, bulk update) return a preview first.
 - MCP resources/prompts: project-specific usage guide ("create an endpoint with this model and add 401/500/empty-list scenarios").
-- `mock-studio mcp install <client>`: run the client's own official command if it has one (e.g. `claude mcp add`, `codex mcp add`; with user approval); otherwise (Copilot, Kiro, Gemini), show a configuration snippet to paste. Do not directly edit clients' configuration files.
+- `mockbrew mcp install <client>`: run the client's own official command if it has one (e.g. `claude mcp add`, `codex mcp add`; with user approval); otherwise (Copilot, Kiro, Gemini), show a configuration snippet to paste. Do not directly edit clients' configuration files.
 
 **Exit criteria:** Manually verify the flow "create an endpoint with this model, add 3 scenarios and a header condition, start the server" with a real LLM client (at least Claude Code and one other); automatically test all tools with the SDK client.
 
@@ -245,7 +245,7 @@ Current `check` only shows the diff; updating bodies is left to the user. Design
 
 Design: [Import and export](ARCHITECTURE.md#import-and-export).
 
-- **Our own package format** (`*.mockstudio.json`): one or more collections; endpoint, scenario, rule, model link, and schema. Preview and conflict resolution on import (skip / rename / overwrite).
+- **Our own package format** (`*.mockbrew.json`): one or more collections; endpoint, scenario, rule, model link, and schema. Preview and conflict resolution on import (skip / rename / overwrite).
 - **Import:** Postman Collection v2.1 (saved example responses become scenarios), OpenAPI 3.x (generate from examples or schema), HAR (from Charles/Proxyman/browser capture), cURL.
 - **Export:** our own package format, Postman Collection v2.1 (requests to the mock address), OpenAPI 3.1 (existing).
 - **Recording mode** (user approval, 2026-11-08): while the proxy is enabled, save real backend responses for unmatched requests as scenarios for endpoints selected by the user; preview before saving, omit sensitive headers (Authorization, Cookie, Set-Cookie), and warn about token-like fields in the body.
@@ -258,12 +258,12 @@ Design: [Import and export](ARCHITECTURE.md#import-and-export).
 Design: [Distribution and updates](ARCHITECTURE.md#distribution-and-updates).
 
 - **Primary path: single binary** (if the M6 SEA prototype succeeds): executables with Node embedded for macOS (arm64/x64), Linux (x64/arm64), and Windows (x64) on GitHub Releases; install and update through Homebrew tap and Scoop/winget (`brew upgrade`, etc.). Users do not need to install Node.
-- **Fallback path** (if SEA fails): an install script (`install.sh` for macOS/Linux, `install.ps1` for Windows) downloads the official Node.js distribution to the user's directory (`~/.mock-studio/runtime`), verifies it with SHASUMS256, and does not require `sudo`; `mock-studio update` installs the new version in a sibling directory and keeps the previous version for rollback.
+- **Fallback path** (if SEA fails): an install script (`install.sh` for macOS/Linux, `install.ps1` for Windows) downloads the official Node.js distribution to the user's directory (`~/.mockbrew/runtime`), verifies it with SHASUMS256, and does not require `sudo`; `mockbrew update` installs the new version in a sibling directory and keeps the previous version for rollback.
 - Check for updates only on user command or when explicitly enabled by a setting (no telemetry).
-- `mock-studio doctor`: diagnose Node, ports, permissions, AI CLIs, and project files.
+- `mockbrew doctor`: diagnose Node, ports, permissions, AI CLIs, and project files.
 - Continue publishing to npm (with provenance) as a secondary path for developers.
 
-**Exit criteria:** On clean macOS, Windows, and Linux machines without Node installed, install with one command and run `mock-studio ui`; a package manager or `update` upgrades from the previous version.
+**Exit criteria:** On clean macOS, Windows, and Linux machines without Node installed, install with one command and run `mockbrew ui`; a package manager or `update` upgrades from the previous version.
 
 ### Milestone 14: Request-aware and validated responses
 

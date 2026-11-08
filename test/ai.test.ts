@@ -79,7 +79,7 @@ function request(extra: Record<string, unknown> = {}) {
 }
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-ai-test-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-ai-test-'));
   record = path.join(dir, 'record.jsonl');
 });
 

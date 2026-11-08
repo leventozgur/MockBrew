@@ -22,7 +22,7 @@ What did you expect to happen?
 
 ## Environment
 
-- Mock API Studio version:
+- MockBrew version:
 - Node.js version:
 - Operating system:
 

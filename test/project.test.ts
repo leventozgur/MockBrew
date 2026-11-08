@@ -30,7 +30,7 @@ async function newProject(options: { watch?: boolean } = {}): Promise<ProjectSer
 const get = (service: ProjectService, p: string, init?: RequestInit) => fetch(`${service.runtime.status().url}${p}`, init);
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-'));
 });
 
 afterEach(async () => {

@@ -116,7 +116,7 @@ JSON Schema Draft 2020-12 is used; the parser uses `web-tree-sitter` 0.24.7 and 
 
 ### AI CLI adapter
 
-- There is no dependency on a specific CLI beyond the provider interface (`AiProvider`); currently, GitHub Copilot CLI is the only provider. It is enabled only with `mock-studio ui --ai copilot` and is not stored in the project file (a file shared in a repository must not direct a CLI to run).
+- There is no dependency on a specific CLI beyond the provider interface (`AiProvider`); currently, GitHub Copilot CLI is the only provider. It is enabled only with `mockbrew ui --ai copilot` and is not stored in the project file (a file shared in a repository must not direct a CLI to run).
 - It is called only when the user selects Generate; the prompt to be sent (JSON Schema, optional user request, and optional model source) is first shown as full text; approval is tied to the hash of the previewed prompt and is rejected if the prompt changes.
 - Because CLIs are agents, they are started in an empty temporary working directory with an empty temporary configuration directory (`--config-dir`; the user's MCP servers, hooks, and extensions are not loaded), an empty tool list, and `shell`/`write` disabled. Comments in model sources pose a prompt-injection risk: sources are marked as data, the CLI has no tools, and its response is validated against the schema.
 - No shell string interpolation; the prompt is a single argv element. Environment variables are passed through an allowlist (`PATH`, `HOME`, proxy settings, `COPILOT_*`, `GH_*`, `GITHUB_*`...).
@@ -169,7 +169,7 @@ Validation used working prototypes followed by tests covering them (exact versio
 - tree-sitter: `web-tree-sitter` 0.27 cannot load because its `dylink` format is incompatible with `tree-sitter-wasms` 0.1.13; Kotlin and Swift grammars load with 0.24.7. On Node 24 and 25, V8's optimizing WASM compiler crashes on these grammars with an out-of-memory error (`Fatal process out of memory: Zone`, exit code 133); this does not occur on Node 22. `--liftoff-only` fixes the issue but cannot be passed with `NODE_OPTIONS`, and `v8.setFlagsFromString()` has no effect; therefore, the parser is a child process started with this flag.
 - `npm audit` (production): `@faker-js/faker` (code execution advisory) and `joi` (quadratic-time DoS advisory) come through Mockoon packages; `npm audit fix` downgrades Mockoon and is not acceptable. Safe mode mitigates the Faker risk; advisories are rechecked when Mockoon is updated.
 - License scan (production tree, 234 packages): all have permissive licenses; the only exception, Mockoon's dependency `@jmespath-community/jmespath` (MPL-2.0, used unmodified), is listed in [NOTICE.md](../NOTICE.md).
-- MCP SDK 1.32.2 (`registerTool`, works with zod 4); package name `@mock-api-studio/studio`.
+- MCP SDK 1.32.2 (`registerTool`, works with zod 4); package name `mockbrew`.
 
 ## Runtime and platform
 
@@ -237,14 +237,14 @@ When profiles, variables, and endpoint mode are added to the sidecar, `schemaVer
 
 ### Import and export
 
-- Package format `*.mockstudio.json`: `{ format: "mock-api-studio/bundle", version: 1, collections: [...] }`; each collection carries endpoints, scenarios, rules, endpoint mode, model links, and schema. IDs are regenerated on import.
+- Package format `*.mockbrew.json`: `{ format: "mockbrew/bundle", version: 1, collections: [...] }`; each collection carries endpoints, scenarios, rules, endpoint mode, model links, and schema. IDs are regenerated on import.
 - Import flow: parse -> validate (size limit, schema, safe-mode notes) -> preview (endpoints to be added/conflicts) -> select conflict handling -> single atomic write.
 - Converters are pure functions under `src/core/import/` (independent of Mockoon): Postman v2.1, OpenAPI 3.x, HAR, cURL. Unsupported items (scripts, auth helpers, requests that are not examples) are reported, not silently skipped.
 
 ### Distribution and updates
 
 - **Primary path: single binary (Node SEA).** If the M6 prototype succeeds, build a binary with embedded Node for each platform; the parser child process runs the same binary with a subcommand, and tree-sitter WASM and UI assets are embedded as SEA assets. Updates use Homebrew/Scoop/winget. The custom runtime design below is used only if SEA fails.
-- Layout (fallback path): `~/.mock-studio/runtime/node-<version>/` (dedicated Node), `~/.mock-studio/app/<version>/` (tool), `~/.mock-studio/bin/mock-studio` (launcher). System Node can be used if it is compatible (>= 22.12); the dedicated runtime is the default (for version consistency).
+- Layout (fallback path): `~/.mockbrew/runtime/node-<version>/` (dedicated Node), `~/.mockbrew/app/<version>/` (tool), `~/.mockbrew/bin/mockbrew` (launcher). System Node can be used if it is compatible (>= 22.12); the dedicated runtime is the default (for version consistency).
 - The installation script downloads the official `nodejs.org` distribution and verifies it with `SHASUMS256.txt`; it does not use `sudo` or write to system directories; PATH changes are shown to the user and made with approval.
-- `mock-studio update`: fetches version information from GitHub Releases or npm only on a user command; installs the new version in a sibling directory, switches the launcher atomically, and keeps the previous version for `rollback`.
+- `mockbrew update`: fetches version information from GitHub Releases or npm only on a user command; installs the new version in a sibling directory, switches the launcher atomically, and keeps the previous version for `rollback`.
 - Note: there is no native `.node` module in production dependencies (checked 2026-11-08); this makes SEA plausible but has not been verified.

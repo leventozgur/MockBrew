@@ -94,7 +94,7 @@ Source: user decisions, 2026-11-08. Milestones and acceptance criteria are in [R
 - FR-47: MCP, UI, and CLI must expose all management operations (endpoint, scenario, rule, profile, collection, server, log, model check, import/export) through narrow, validated tools. (M10)
 - FR-48: AI CLIs installed on the machine (Claude Code, Codex, Copilot, Gemini, Kiro CLI) must be detectable and selectable. (M11)
 - FR-49: Collections must support export/import as a single-file package; importing Postman v2.1, OpenAPI 3.x, HAR, and cURL, and exporting Postman v2.1 must be supported. (M12)
-- FR-50: Installation on a machine without Node.js must be possible with a single command, and `mock-studio update` must support updates and rollback. (M13)
+- FR-50: Installation on a machine without Node.js must be possible with a single command, and `mockbrew update` must support updates and rollback. (M13)
 - FR-51: Real backend responses received through a proxy must be saveable as scenarios, with preview and sensitive header removal. (M12)
 - FR-52: Responses must support allowlisted, non-executable dynamic values and project variables. (M14)
 - FR-53: Request bodies must be validated against the associated request model; a 400/422 scenario must be returned when validation fails. (M14)
@@ -158,7 +158,7 @@ How requirements are interpreted in the implementation; evidence is in the [Road
 - FR-05: Path parameter names are ignored in duplicate checks (`/users/:id` and `/users/:userId` are the same route). A later static route shadowed by an earlier parameterized route (`/users/:id` and `/users/me`) is reported as a warning, not an error.
 - FR-12: CORS is configured in `wildcard` (`*`) or `reflect` (request origin, `Allow-Credentials: true`, `Vary: Origin`) mode.
 - FR-27: The model associated with an endpoint validates only the bodies of 2xx scenarios; 4xx/5xx error responses have their own shape and are not checked against the success response model. Violations appear as warnings in the UI and as errors in `save_scenario` and `check`.
-- FR-31: AI CLI generation from the UI is launched with `mock-studio ui --ai copilot`; the prompt is optional; every submission requires preview and confirmation.
+- FR-31: AI CLI generation from the UI is launched with `mockbrew ui --ai copilot`; the prompt is optional; every submission requires preview and confirmation.
 - Scope addition: Moshi `@Json(name, ignore)` is included in the initial parser scope; typealias and recursive types are supported.
 - Scope addition (security): Mockoon templating, data buckets, callbacks, and CRUD/WebSocket routes are not run by default (safe mode); they can be explicitly enabled in project settings.
 - Added in M5: proxy unmatched requests to the real backend (starts disabled), model change check (`check`), OpenAPI export.

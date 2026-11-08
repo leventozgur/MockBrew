@@ -10,10 +10,10 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: path.resolve(here, '../dist/ui'), emptyOutDir: true },
   server: {
-    // `npm run dev:ui` with MOCK_STUDIO_API=http://127.0.0.1:<port> from "mock-studio ui".
+    // `npm run dev:ui` with MOCKBREW_API=http://127.0.0.1:<port> from "mockbrew ui".
     // The control API only accepts its own Host and Origin, so both are rewritten.
-    proxy: process.env.MOCK_STUDIO_API
-      ? { '/api': { target: process.env.MOCK_STUDIO_API, changeOrigin: true, headers: { Origin: process.env.MOCK_STUDIO_API } } }
+    proxy: process.env.MOCKBREW_API
+      ? { '/api': { target: process.env.MOCKBREW_API, changeOrigin: true, headers: { Origin: process.env.MOCKBREW_API } } }
       : undefined,
   },
 });

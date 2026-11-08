@@ -20,7 +20,7 @@ const rows = [...packages.entries()].sort(([a], [b]) => a.localeCompare(b)).map(
 
 const text = `# Third-party notices
 
-Mock API Studio is an independent tool. It is not a fork or an extension of Mockoon and is not affiliated
+MockBrew is an independent tool. It is not a fork or an extension of Mockoon and is not affiliated
 with Mockoon. It uses the Mockoon mock engine (\`@mockoon/commons\` and \`@mockoon/commons-server\`) as a library.
 
 ## Mockoon

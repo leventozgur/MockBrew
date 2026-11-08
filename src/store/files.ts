@@ -63,7 +63,7 @@ export async function locateProject(input: string): Promise<ProjectLocation> {
   try {
     stat = await fs.stat(target);
   } catch {
-    throw new StudioError('NOT_FOUND', `Project path "${input}" was not found. Create one with "mock-studio init".`);
+    throw new StudioError('NOT_FOUND', `Project path "${input}" was not found. Create one with "mockbrew init".`);
   }
 
   if (stat.isDirectory()) {
@@ -74,7 +74,7 @@ export async function locateProject(input: string): Promise<ProjectLocation> {
     const environments = names.filter((n) => n.endsWith(ENVIRONMENT_SUFFIX)).sort();
     if (environments.length > 1) throw invalid(`"${input}" contains several environments (${environments.join(', ')}); pass one of the files.`);
     if (environments.length === 1) return fromEnvironment(path.join(target, environments[0] as string));
-    throw new StudioError('NOT_FOUND', `No project found in "${input}". Create one with "mock-studio init".`);
+    throw new StudioError('NOT_FOUND', `No project found in "${input}". Create one with "mockbrew init".`);
   }
   return target.endsWith(STUDIO_SUFFIX) ? fromStudio(target) : fromEnvironment(target);
 }

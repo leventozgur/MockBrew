@@ -5,7 +5,7 @@ import { copilotCliProvider } from '../../ai/copilot.js';
 import { startControlApi } from '../../control-api/server.js';
 import { type Io, UsageError, openProject, parsePort, waitForSignal } from '../common.js';
 
-export const uiHelp = `mock-studio ui [--project <path>]
+export const uiHelp = `mockbrew ui [--project <path>]
 
 Starts the local web UI. It listens on 127.0.0.1 only and is protected by a session token that is part
 of the printed address.

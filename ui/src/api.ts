@@ -1,6 +1,6 @@
 import type { ApiErrorBody } from '../../src/core/view';
 
-const TOKEN_KEY = 'mock-studio-token';
+const TOKEN_KEY = 'mockbrew-token';
 
 /** Takes the session token from the URL fragment (never sent to a server) and keeps it per tab. */
 export function initToken(): string | null {

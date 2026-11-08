@@ -17,7 +17,7 @@ async function freePort(): Promise<number> {
 
 test('dashboard scenarios, live switching, request log and local generation', async ({ page }) => {
   await access('dist/ui/index.html').catch(() => { throw new Error('dist/ui is missing; run npm run build before npm run test:e2e'); });
-  const dir = await mkdtemp(join(tmpdir(), 'mock-studio-e2e-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mockbrew-e2e-'));
   const mockPort = await freePort();
   const uiPort = await freePort();
   const init = spawnSync(process.execPath, ['dist/cli/main.js', 'init', dir, '--port', String(mockPort)], { encoding: 'utf8' });
@@ -95,7 +95,7 @@ test('dashboard scenarios, live switching, request log and local generation', as
 
 test('conditional responses, override and request reasons', async ({ page }) => {
   await access('dist/ui/index.html');
-  const dir = await mkdtemp(join(tmpdir(), 'mock-studio-rules-e2e-'));
+  const dir = await mkdtemp(join(tmpdir(), 'mockbrew-rules-e2e-'));
   const mockPort = await freePort();
   const uiPort = await freePort();
   const init = spawnSync(process.execPath, ['dist/cli/main.js', 'init', dir, '--port', String(mockPort)], { encoding: 'utf8' });

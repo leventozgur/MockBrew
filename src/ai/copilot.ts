@@ -5,7 +5,7 @@ import { type AiProvider, CONFIG_DIR_PLACEHOLDER } from './cli-runner.js';
  * out (sign-in is kept by the system keychain), tools are filtered to a name that does not exist and
  * shell/write are denied as well.
  */
-export const copilotCliProvider = (command = process.env.MOCK_STUDIO_COPILOT_BIN || 'copilot'): AiProvider => ({
+export const copilotCliProvider = (command = process.env.MOCKBREW_COPILOT_BIN || 'copilot'): AiProvider => ({
   id: 'copilot-cli',
   name: 'GitHub Copilot CLI',
   invocation(prompt) {

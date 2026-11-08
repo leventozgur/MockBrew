@@ -1,8 +1,8 @@
-# Mock API Studio
+# MockBrew
 
 An offline-first, free tool for mocking local endpoints during Android, iOS, and Kotlin Multiplatform development, before a backend is ready.
 
-The tool is an **independent npm package** that uses the MIT-licensed mock engine from Mockoon as a library. It is not a fork or plugin. The engine provides mock runtime features; Mock API Studio adds response generation from Kotlin/Swift models, collection management, a local web UI, and MCP integration for Kiro/Copilot.
+The tool is an **independent npm package** that uses the MIT-licensed mock engine from Mockoon as a library. It is not a fork or plugin. The engine provides mock runtime features; MockBrew adds response generation from Kotlin/Swift models, collection management, a local web UI, and MCP integration for Kiro/Copilot.
 
 ## Product goals
 
@@ -15,7 +15,7 @@ The tool is an **independent npm package** that uses the MIT-licensed mock engin
 
 ## Key decisions
 
-- **Distribution:** One npm package (CLI + local web UI + MCP server). Package: `@mock-api-studio/studio`; command: `mock-studio`. The unscoped `mock-api-studio` name is taken on npm, so a scoped name is used; ownership of `@mock-api-studio` must be verified before publishing.
+- **Distribution:** One npm package (CLI + local web UI + MCP server). Package and command: `mockbrew` (the name was free on npm and Homebrew on 2026-11-08; reserve it before publishing).
 - **Mock engine:** `@mockoon/commons` and `@mockoon/commons-server` 9.10.0 (MIT), pinned to exact versions.
 - **Data format:** `<name>.environment.json` (Mockoon environment) + `<name>.studio.json` (tool-specific sidecar, `schemaVersion: 1`). The environment file also works with Mockoon CLI.
 - **No fork:** Rejected due to Electron/Angular maintenance, code-signing cost, and upstream merge burden. Details: [Architecture](docs/ARCHITECTURE.md#decision-log).
@@ -29,17 +29,17 @@ The tool is an **independent npm package** that uses the MIT-licensed mock engin
 
 Requirement: Node.js >= 22.12 (`node -v`). No additional Android/iOS project setup is needed; the tool reads Kotlin and Swift without compiling them.
 
-The package is not yet published to npm, so there are two tested installation options. Both make `mock-studio` available and require no `sudo`.
+The package is not yet published to npm, so there are two tested installation options. Both make `mockbrew` available and require no `sudo`.
 
 **1. From the team repository, in a separate tools directory (recommended)**
 
 ```sh
-mkdir -p ~/tools/mock-studio && cd ~/tools/mock-studio
+mkdir -p ~/tools/mockbrew && cd ~/tools/mockbrew
 npm init -y
 npm install git+ssh://git@<host>/<org>/<repo>.git     # the prepare script builds the tool (a few minutes)
 
 # Add to ~/.zshrc:
-export PATH="$HOME/tools/mock-studio/node_modules/.bin:$PATH"
+export PATH="$HOME/tools/mockbrew/node_modules/.bin:$PATH"
 ```
 
 To update, repeat `npm install git+ssh://...` in the same directory (append `#<tag>` to pin a specific version).
@@ -47,20 +47,20 @@ To update, repeat `npm install git+ssh://...` in the same directory (append `#<t
 **2. Clone and build**
 
 ```sh
-git clone <repo-url> ~/tools/mock-api-studio && cd ~/tools/mock-api-studio
+git clone <repo-url> ~/tools/mockbrew && cd ~/tools/mockbrew
 npm ci        # installs dependencies and builds
 
 # Add to ~/.zshrc:
-alias mock-studio='node ~/tools/mock-api-studio/dist/cli/main.js'
+alias mockbrew='node ~/tools/mockbrew/dist/cli/main.js'
 ```
 
 To update, run `git pull && npm ci`. (`npm link` is also an option; npm's global directory must be writable.)
 
-A project that already uses Node (for example, React Native or KMP web) can add the tool as a dependency with `npm install -D git+ssh://...` and run `npx mock-studio <command>`.
+A project that already uses Node (for example, React Native or KMP web) can add the tool as a dependency with `npm install -D git+ssh://...` and run `npx mockbrew <command>`.
 
-**After npm publication**, use `npx @mock-api-studio/studio <command>` or `npm install -g @mock-api-studio/studio`.
+**After npm publication**, use `npx mockbrew <command>` or `npm install -g mockbrew`.
 
-Check the installation with `mock-studio --version`.
+Check the installation with `mockbrew --version`.
 
 ## Usage
 
@@ -70,31 +70,31 @@ Keep mock files in the mobile application repository (for example, `mocks/`) and
 
 ```sh
 cd <application-repository>
-mock-studio init mocks --name "Shop API"     # mocks/shop-api.environment.json + shop-api.studio.json
-mock-studio ui -p mocks --root . --open        # local web UI (--root: directory from which model files may be read)
+mockbrew init mocks --name "Shop API"     # mocks/shop-api.environment.json + shop-api.studio.json
+mockbrew ui -p mocks --root . --open        # local web UI (--root: directory from which model files may be read)
 git add mocks && git commit -m "Add mocks"
 ```
 
 **Everyone else (after `git pull`):**
 
 ```sh
-mock-studio serve -p mocks                     # runs active collections at http://127.0.0.1:3000
-mock-studio ui -p mocks --root . --open        # or edit and run them in the UI
+mockbrew serve -p mocks                     # runs active collections at http://127.0.0.1:3000
+mockbrew ui -p mocks --root . --open        # or edit and run them in the UI
 ```
 
-Point the application's debug build at the mock: Android Emulator `http://10.0.2.2:3000/`, iOS Simulator `http://localhost:3000/`. For debug `network_security_config` / ATS settings and physical-device steps, run `mock-studio snippets`.
+Point the application's debug build at the mock: Android Emulator `http://10.0.2.2:3000/`, iOS Simulator `http://localhost:3000/`. For debug `network_security_config` / ATS settings and physical-device steps, run `mockbrew snippets`.
 
 Other commands:
 
 ```sh
-mock-studio generate -m app/model -t "BaseResponse<User>" \
+mockbrew generate -m app/model -t "BaseResponse<User>" \
   -p mocks --collection Users --method GET --path /users/:id   # save a scenario from a model
-mock-studio check -p mocks --root .                            # check for model changes (exit 1 if changed; for CI)
-mock-studio export openapi -p mocks -o openapi.json
-mock-studio mcp -p mocks --root .                              # MCP for Kiro / Copilot
+mockbrew check -p mocks --root .                            # check for model changes (exit 1 if changed; for CI)
+mockbrew export openapi -p mocks -o openapi.json
+mockbrew mcp -p mocks --root .                              # MCP for Kiro / Copilot
 ```
 
-Run `mock-studio --help` for the full command list. For MCP setup and development, see the [Development Guide](docs/DEVELOPMENT.md).
+Run `mockbrew --help` for the full command list. For MCP setup and development, see the [Development Guide](docs/DEVELOPMENT.md).
 
 ## About `npm audit` warnings
 

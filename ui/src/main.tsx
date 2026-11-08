@@ -16,9 +16,9 @@ if (root) {
         </StudioProvider>
       ) : (
         <div className="centered">
-          <h1>Mock API Studio</h1>
+          <h1>MockBrew</h1>
           <p>
-            Open this page with the address printed by <code>mock-studio ui</code>; it carries the session token.
+            Open this page with the address printed by <code>mockbrew ui</code>; it carries the session token.
           </p>
         </div>
       )}

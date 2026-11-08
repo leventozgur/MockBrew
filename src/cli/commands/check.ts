@@ -3,7 +3,7 @@ import { StudioError } from '../../core/errors.js';
 import type { ModelCheck } from '../../core/view.js';
 import { type Io, openProject } from '../common.js';
 
-export const checkHelp = `mock-studio check [--project <path>]
+export const checkHelp = `mockbrew check [--project <path>]
 
 Re-reads the source files of every model linked to an endpoint and reports changes since the model was
 linked (added, removed or retyped properties, new required fields, enum changes) and saved bodies that no

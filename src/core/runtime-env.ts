@@ -16,7 +16,7 @@ export function seaAssetDir(): string {
   const version = seaVersion();
   if (!/^[\w.-]+$/.test(version) || version === '.' || version === '..') throw new Error('Invalid SEA version.');
   const cache = process.env.XDG_CACHE_HOME || path.join(os.homedir(), 'Library', 'Caches');
-  const root = path.join(cache, 'mock-api-studio', version);
+  const root = path.join(cache, 'mockbrew', version);
   for (const [name, hash] of Object.entries(manifest)) {
     if (!name.split('/').every((part) => /^[\w.-]+$/.test(part) && part !== '.' && part !== '..')) throw new Error('Invalid SEA asset name.');
     const bytes = Buffer.from(sea.getAsset(name));

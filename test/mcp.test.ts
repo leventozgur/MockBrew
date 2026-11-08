@@ -27,7 +27,7 @@ async function studioText(): Promise<string> {
 }
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-mcp-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-mcp-'));
   await fs.cp(path.resolve('test/fixtures'), path.join(dir, 'models'), { recursive: true });
   const service = await ProjectService.init(path.join(dir, 'mocks'), 'Shop', { port: 38777 });
   await service.close();

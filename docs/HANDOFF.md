@@ -8,7 +8,7 @@ This document is the summary and starting point that the person (or agent) conti
 
 ## 1. What is the project
 
-**Mock API Studio** is a free, offline-first mock API tool for Android, iOS, and Kotlin Multiplatform teams. It runs locally (localhost) before the backend is ready.
+**MockBrew** is a free, offline-first mock API tool for Android, iOS, and Kotlin Multiplatform teams. It runs locally (localhost) before the backend is ready.
 
 - Reads Kotlin (Gson, Kotlinx Serialization, Moshi) and Swift (`Codable`) models **without compiling them**, derives JSON Schema, and generates deterministic sample JSON that conforms to the schema and is meaningful for each field name.
 - Groups endpoints into collections; stores multiple response scenarios per endpoint (success, empty list, 401, 500...); runs active collections together on one port.
@@ -16,7 +16,7 @@ This document is the summary and starting point that the person (or agent) conti
 - Mock definitions are files that can be committed to git; teams share them through git.
 - AI is optional and disabled by default. All core functionality works without AI.
 
-**Distribution:** A single npm package, `@mock-api-studio/studio`, with the `mock-studio` command (CLI + local web UI + MCP server). Not yet published to npm.
+**Distribution:** A single npm package, `mockbrew`, with the `mockbrew` command (CLI + local web UI + MCP server). Not yet published to npm.
 
 **Working directory:** repository root (folder name `mobile-mock-api-studio`; "mobile" was dropped from the product name).
 
@@ -25,7 +25,7 @@ This document is the summary and starting point that the person (or agent) conti
 | Date | Event |
 |---|---|
 | 2026-11-03 | The need was defined. Mockoon was rejected because it is paid (user). Scope, roadmap, and AI/Node/serialization decision points were discussed. Kotlin serialization formats were verified against two private implementation repositories. Planning documents were written (there was no implementation at the time, and the plan was to build a mock server from scratch with Fastify). |
-| 2026-11-04 | M0-M5 were implemented. Mockoon's MIT-licensed packages were chosen as the mock engine library (see [4. Decisions made](#4-decisions-made), decision 1). The product was named "Mock API Studio." Installation and usage were added to the README. |
+| 2026-11-04 | M0-M5 were implemented. Mockoon's MIT-licensed packages were chosen as the mock engine library (see [4. Decisions made](#4-decisions-made), decision 1). The product was named "MockBrew." Installation and usage were added to the README. |
 | 2026-11-08 | This handoff report was prepared; status was measured again. |
 
 ## 3. User requests and how they were addressed
@@ -47,7 +47,7 @@ Requests expressed in the user's own words and their current status. Items marke
 | Graphical interface; web UI is acceptable; choose the fastest/most functional path | Met | Localhost web UI (React + Vite), served with Fastify. No desktop app. |
 | Check for Node.js during installation; if missing, install it first and then continue | **Deviation (confirmation required)** | Only a version check and error message are provided; the tool does not install Node. PRODUCT_REQUIREMENTS marks this "out of MVP." See decision question 2. |
 | Determine Kotlin serialization formats from real applications | Done | Android: Gson (`@SerializedName`, Retrofit). KMP: `kotlinx.serialization` (`@Serializable`, `@SerialName`, Ktor ContentNegotiation). Moshi was not found in the projects examined; it was still added because it was inexpensive to support. |
-| Name the project "Mock API Studio"; explain how other developers install/run it | Done | README "Installation" and "Usage." |
+| Name the project "MockBrew"; explain how other developers install/run it | Done | README "Installation" and "Usage." |
 
 ## 4. Decisions made
 
@@ -131,7 +131,7 @@ None of these have been tried; they must not be reported as "working."
 - **CORS in WebView:** Tested at HTTP level only.
 - **In-app network settings:** Debug `network_security_config` (Android) and `NSAllowsLocalNetworking` (iOS) were not tested with an app project.
 - **Windows and Linux:** Not tested. The CI matrix is configured only for `ubuntu-latest` and `macos-latest` (Node 22, 24) and has **never been run** (the project is not a git repository).
-- **Team codebase scan:** `mock-studio generate --list` was not run on real models, and the reported `issues` list was not reviewed. Use of Moshi, generic wrappers, and sealed classes is therefore unknown.
+- **Team codebase scan:** `mockbrew generate --list` was not run on real models, and the reported `issues` list was not reviewed. Use of Moshi, generic wrappers, and sealed classes is therefore unknown.
 - **MCP flow with Kiro/Copilot chat:** Tested only at the protocol level with an SDK client.
 - **OpenAPI export:** Not tested with an external OpenAPI validator.
 - **`@mockoon/commons-server` stability:** No stable API guarantee for general use; protected by exact pinning and integration tests.
@@ -145,7 +145,7 @@ None of these have been tried; they must not be reported as "working."
 
 ### Before release
 
-- Ownership of the `@mock-api-studio` npm scope is unverified (the plain `mock-api-studio` name is taken).
+- Product renamed to **MockBrew** (user decision 2026-11-08; the earlier name was taken on npm and GitHub). `mockbrew` was free on npm and Homebrew on 2026-11-08; GitHub was not verified. Reserve the npm name before publishing.
 - **The project is not a git repository:** no `.git`, no remote. The `git+ssh://<server>/<org>/<repo>.git` installation path in the README cannot be used until a repository is created.
 - Company open-source tool approval is needed before corporate use (the MPL-2.0 dependency was noted).
 
@@ -200,7 +200,7 @@ Only `store/` and `runtime/` depend directly on Mockoon packages.
 | `npm run build` | Server (tsc -> `dist/`) and UI (Vite -> `dist/ui`) | Yes |
 | `npm run lint` | Server and UI type check | Yes |
 | `npm test` | Vitest (compiles `dist/` with `tsc` first) | Yes |
-| `npm run dev:ui` | Vite dev server; connects to the `ui` command with `MOCK_STUDIO_API=http://127.0.0.1:<ui-port>` | No |
+| `npm run dev:ui` | Vite dev server; connects to the `ui` command with `MOCKBREW_API=http://127.0.0.1:<ui-port>` | No |
 | `npm run notice` | Generates `NOTICE.md` | No |
 | `node dist/cli/main.js --help` | CLI | `--version` yes |
 
@@ -235,7 +235,7 @@ Derived from rules written in the existing documents and decision record.
 2. Fix the two flaky tests in `test/ai.test.ts` (wait for the call log file, assert that `call` is defined, increase the timeout), then run the full suite several times to verify stability.
 3. Clarify the questions in [section 8](#8-decisions-pending-from-the-user) with the user; based on the answers, plan Node bootstrap, collection import/export, or a Kiro provider.
 4. Turn the project into a git repository (with user approval) and run CI for the first time; record Linux and Node 22 results.
-5. Run `mock-studio generate --list` on real team models (Android Gson, KMP Kotlinx, Swift Codable) and update parser coverage based on the `issues` list.
+5. Run `mockbrew generate --list` on real team models (Android Gson, KMP Kotlinx, Swift Codable) and update parser coverage based on the `issues` list.
 6. Close open verification items in order: Mockoon desktop, physical devices, WebView CORS, in-app cleartext/ATS, MCP with Kiro/Copilot chat.
 7. Before release: npm scope ownership, package name, license approval.
 

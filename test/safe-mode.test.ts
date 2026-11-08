@@ -22,7 +22,7 @@ async function freePort(): Promise<number> {
 
 /** A project whose Mockoon file (as if pulled from git) uses features that run helper code. */
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-safe-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-safe-'));
   service = await ProjectService.init(dir, 'Safe', { port: await freePort() });
   const c = await service.createCollection('Shared');
   await service.createEndpoint(c, { method: 'GET', path: '/templated', scenarios: [{ body: '{"v":"plain"}' }] });

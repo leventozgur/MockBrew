@@ -46,7 +46,7 @@ export class ParserHost {
   private start(): Promise<void> {
     if (this.ready) return this.ready;
     const child = isSea() ? spawn(process.execPath, [], {
-      env: { ...process.env, MOCK_STUDIO_SEA_WORKER: '1' },
+      env: { ...process.env, MOCKBREW_SEA_WORKER: '1' },
       serialization: 'json',
       stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
     }) : fork(resolveWorkerPath(), [], {

@@ -8,10 +8,10 @@ Node v23.9.0 from `/opt/homebrew/bin/node`, Rolldown 1.2.16 and `postject@1.0.0-
 
 ```sh
 npm run build
-npm_config_cache=/private/tmp/mock-studio-npm-cache /opt/homebrew/bin/node scripts/sea/build.mjs
+npm_config_cache=/private/tmp/mockbrew-npm-cache /opt/homebrew/bin/node scripts/sea/build.mjs
 ```
 
-The build bundles the compiled CLI and worker, generates the SEA blob, copies Node, removes its signature, injects with the documented SEA fuse and `NODE_SEA` Mach-O segment, and ad-hoc signs. `codesign --verify --verbose=2 scripts/sea/out/mock-studio` passed. The first injector attempt could not write the default npm cache; the temporary cache solved that. The installed `/usr/local/bin/node` v22.14.0 is a universal binary: postject reported multiple sentinel occurrences. The Node 23 executable is arm64-only. Node 23 is not a release-runtime recommendation; select and pin a supported runtime. See the [Node SEA documentation](https://nodejs.org/download/release/latest-jod/docs/api/single-executable-applications.html).
+The build bundles the compiled CLI and worker, generates the SEA blob, copies Node, removes its signature, injects with the documented SEA fuse and `NODE_SEA` Mach-O segment, and ad-hoc signs. `codesign --verify --verbose=2 scripts/sea/out/mockbrew` passed. The first injector attempt could not write the default npm cache; the temporary cache solved that. The installed `/usr/local/bin/node` v22.14.0 is a universal binary: postject reported multiple sentinel occurrences. The Node 23 executable is arm64-only. Node 23 is not a release-runtime recommendation; select and pin a supported runtime. See the [Node SEA documentation](https://nodejs.org/download/release/latest-jod/docs/api/single-executable-applications.html).
 
 ## Runtime and acceptance
 
@@ -44,6 +44,6 @@ The coordinator should run the full suite outside the sandbox. Before release, i
 The agent's failures (`EMFILE` on file watching, MCP connection closed) came from its execution sandbox. Re-run on the same Mac without that sandbox, after rebasing onto `main`:
 
 - `npm run lint`: pass. `npm test`: 9 files, 119 tests passed.
-- `scripts/sea/out/mock-studio --version` -> `0.1.0`; `init` created a project; `serve` started **without** `CHOKIDAR_USEPOLLING` and answered an unmatched request with the JSON 404; `generate -m test/fixtures/kotlin/GsonModels.kt --list` listed the types through the self-relaunched parser worker.
+- `scripts/sea/out/mockbrew --version` -> `0.1.0`; `init` created a project; `serve` started **without** `CHOKIDAR_USEPOLLING` and answered an unmatched request with the JSON 404; `generate -m test/fixtures/kotlin/GsonModels.kt --list` listed the types through the self-relaunched parser worker.
 
 Updated recommendation: **SEA is viable on macOS arm64 for this application.** Still open before M13 relies on it: a supported pinned runtime (Node 22 or 24 LTS, single-architecture binary), a cross-platform cache directory (the prototype uses `~/Library/Caches`), Linux and Windows builds, clean-machine tests, and signing/notarization.

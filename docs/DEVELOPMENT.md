@@ -97,7 +97,7 @@ The Status column shows which checks were actually performed while preparing thi
 | Mockoon desktop: opens and edits a file created by the tool; the tool detects the change | **Not tested** (desktop is not installed). Mockoon CLI and Mockoon's own schema validation passed; detection of external changes is covered by tests |
 | Kiro/Copilot: connects to the MCP server, parses a model, validates and saves a generated body | Done at the protocol level with an SDK client; not tested with real Kiro/Copilot chat |
 | Windows and Linux | Not tested |
-| Team codebase (Moshi, generic wrappers, sealed class usage) | Not tested; run against real models with `mock-studio generate --list` |
+| Team codebase (Moshi, generic wrappers, sealed class usage) | Not tested; run against real models with `mockbrew generate --list` |
 
 ## Pre-release checklist
 
@@ -107,7 +107,7 @@ The Status column shows which checks were actually performed while preparing thi
 - [x] License notice file is up to date (`npm run notice`); the "Mockoon" brand is absent from the product name/UI.
 - [x] No paid service or AI CLI package is bundled; no telemetry.
 - [x] Project files contain no absolute paths, usernames, or tokens (tests). Logs are masked; body logging is disabled by default.
-- [ ] Ownership of the `@mock-api-studio` npm scope is not verified; finalize the package name before publishing.
+- [ ] Reserve the `mockbrew` npm package name (free on 2026-11-08) and check the GitHub repository name before publishing.
 - [ ] Mockoon desktop, physical device, and Windows/Linux checks (matrix above).
 - [ ] Company approval for open-source tools before corporate use (the `@jmespath-community/jmespath` MPL-2.0 dependency has been noted).
 
@@ -118,7 +118,7 @@ npm install              # dependencies (exact versions, package-lock.json); the
 npm run build            # server (tsc -> dist/) and UI (vite -> dist/ui)
 npm run build:server     # tsc only
 npm run build:ui         # UI only
-npm run dev:ui           # Vite dev server; connects to the `ui` command via MOCK_STUDIO_API=http://127.0.0.1:<ui-port>
+npm run dev:ui           # Vite dev server; connects to the `ui` command via MOCKBREW_API=http://127.0.0.1:<ui-port>
 npm test                 # vitest (dist/ is built with tsc before tests start)
 npm run lint             # type checking: server and UI
 npm run notice           # generates NOTICE.md
@@ -126,21 +126,21 @@ npm run notice           # generates NOTICE.md
 node dist/cli/main.js --help
 ```
 
-CLI commands: `init`, `ui`, `serve`, `generate`, `check`, `export openapi`, `snippets`, `mcp` (`mock-studio <command> --help`).
+CLI commands: `init`, `ui`, `serve`, `generate`, `check`, `export openapi`, `snippets`, `mcp` (`mockbrew <command> --help`).
 
 Tests run against the compiled output (`dist/`): because the parser WASM runs in a separate child process (`--liftoff-only`), `src/parser/host.ts` locates `dist/parser/worker.js` at runtime. `npm test` builds this itself using `test/global-setup.ts`.
 
 ## MCP setup (Kiro and Copilot)
 
-The MCP server runs over stdio; `--root` is the directory from which model files can be read (usually the root of the app repository), and `--project` is the directory for mock files. The examples assume you have added the tool to PATH using the [installation instructions in the README](../README.md#installation) (`mock-studio --version` should work). After the package is published to npm, you can also use `"command": "npx"` and `"args": ["-y", "@mock-api-studio/studio", "mcp", ...]`.
+The MCP server runs over stdio; `--root` is the directory from which model files can be read (usually the root of the app repository), and `--project` is the directory for mock files. The examples assume you have added the tool to PATH using the [installation instructions in the README](../README.md#installation) (`mockbrew --version` should work). After the package is published to npm, you can also use `"command": "npx"` and `"args": ["-y", "mockbrew", "mcp", ...]`.
 
 Kiro (`.kiro/settings/mcp.json`):
 
 ```json
 {
   "mcpServers": {
-    "mock-studio": {
-      "command": "mock-studio",
+    "mockbrew": {
+      "command": "mockbrew",
       "args": ["mcp", "--project", "mocks", "--root", "."]
     }
   }
@@ -152,9 +152,9 @@ GitHub Copilot (VS Code, `.vscode/mcp.json`):
 ```json
 {
   "servers": {
-    "mock-studio": {
+    "mockbrew": {
       "type": "stdio",
-      "command": "mock-studio",
+      "command": "mockbrew",
       "args": ["mcp", "--project", "mocks", "--root", "."]
     }
   }

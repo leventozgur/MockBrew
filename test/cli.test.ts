@@ -11,7 +11,7 @@ let dir: string;
 let child: ChildProcess | undefined;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mock-studio-cli-'));
+  dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockbrew-cli-'));
 });
 
 afterEach(async () => {

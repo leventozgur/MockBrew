@@ -379,7 +379,7 @@ export async function startControlApi(options: ControlApiOptions): Promise<Contr
     });
   } else {
     app.get('/', async (_request, reply) =>
-      reply.type('text/plain').send('The UI is not built. Run "npm run build" in the mock-studio package, then start again.'),
+      reply.type('text/plain').send('The UI is not built. Run "npm run build" in the mockbrew package, then start again.'),
     );
   }
 

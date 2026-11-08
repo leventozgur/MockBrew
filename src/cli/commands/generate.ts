@@ -10,7 +10,7 @@ import { VARIANTS, type Variant } from '../../generator/index.js';
 import type { DateFormat, GenerationSettings, NamingStrategy } from '../../schema/index.js';
 import { type Io, UsageError, formatIssue, openProject } from '../common.js';
 
-export const generateHelp = `mock-studio generate --model <file|folder>... [--type <Type>]
+export const generateHelp = `mockbrew generate --model <file|folder>... [--type <Type>]
 
 Parses Kotlin (Gson, Kotlinx Serialization, Moshi) and Swift (Codable) models without compiling them and
 prints a JSON body that matches the model. The source is parsed only, never executed.
@@ -145,7 +145,7 @@ export async function generateCommand(argv: string[], io: Io): Promise<void> {
     const shared = commonAncestor(service.projectDir, root);
     let sources: string[] = [];
     if (isBroadRoot(shared)) {
-      io.err('Note: the model files and the project share no folder below your home folder, so no source paths are recorded and "mock-studio check" cannot re-read this model.');
+      io.err('Note: the model files and the project share no folder below your home folder, so no source paths are recorded and "mockbrew check" cannot re-read this model.');
     } else {
       service.setAccessRoot(shared);
       sources = parsed.sources.map((name) => path.relative(shared, path.join(root, name)).split(path.sep).join('/'));

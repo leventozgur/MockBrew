@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util';
 import type { RequestLog } from '../../core/view.js';
 import { type Io, UsageError, openProject, parsePort, waitForSignal } from '../common.js';
 
-export const serveHelp = `mock-studio serve [--project <path>]
+export const serveHelp = `mockbrew serve [--project <path>]
 
 Runs the active collections of a project on one port, without the UI. Changes to the project files
 (git pull, an editor, the UI in another process) are picked up without restarting.
